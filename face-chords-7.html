@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Face Chords</title>
+<style>
+  :root {
+    --bg:#0d0a16;
+    --panel:#161126;
+    --edge:#2a2145;
+    --maj:#ffb545;
+    --min:#5b8dff;
+    --sus:#b06bff;
+    --text:#e8e4f2;
+    --dim:#7d7693;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    height:100%; overflow:hidden;
+    background:radial-gradient(ellipse 90% 60% at 50% 0%, #1a1330, var(--bg) 70%);
+    font-family:system-ui, sans-serif;
+    color:var(--text);
+    -webkit-tap-highlight-color:transparent;
+    user-select:none; -webkit-user-select:none;
+  }
+  body { display:flex; flex-direction:column; }
+
+  /* ---- top: camera + expression ---- */
+  #top {
+    flex:0 0 auto;
+    display:flex; gap:12px; align-items:center;
+    padding:8px 14px 4px;
+  }
+  #cam {
+    width:86px; height:112px;
+    border-radius:14px;
+    overflow:hidden;
+    background:#000;
+    border:2px solid var(--edge);
+    position:relative;
+    flex:0 0 auto;
+  }
+  #video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+  #camstate {
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; color:var(--dim); text-align:center; padding:6px;
+    background:rgba(0,0,0,0.5);
+  }
+  #camstate.hidden { display:none; }
+  #fdbg {
+    position:absolute; inset:0;
+    display:none;
+    background:rgba(0,0,0,0.72);
+    font-family:ui-monospace,monospace;
+    font-size:8px; line-height:1.5;
+    color:#9fe8c9;
+    padding:4px 5px;
+    white-space:pre;
+    pointer-events:none;
+  }
+  #fdbg.show { display:block; }
+  #expr { flex:1; display:flex; flex-direction:column; gap:6px; }
+  #quality {
+    font-size:26px; font-weight:800; letter-spacing:0.06em;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  #quality .face { font-size:30px; }
+  #quality.MAJOR { color:var(--maj); text-shadow:0 0 18px rgba(255,181,69,0.4); }
+  #quality.MINOR { color:var(--min); text-shadow:0 0 18px rgba(91,141,255,0.4); }
+  #quality.SUS   { color:var(--sus); text-shadow:0 0 18px rgba(176,107,255,0.4); }
+  #moodtrack {
+    height:11px; border-radius:6px;
+    background:linear-gradient(90deg, var(--min), var(--sus) 50%, var(--maj));
+    position:relative;
+    border:1px solid var(--edge);
+  }
+  #moodcursor {
+    position:absolute; top:-4px; width:4px; height:19px;
+    background:#fff; border-radius:2px;
+    left:50%; transform:translateX(-50%);
+    box-shadow:0 0 8px rgba(255,255,255,0.7);
+  }
+  #moodlabels { display:flex; justify-content:space-between; font-size:8px; letter-spacing:0.12em; text-transform:uppercase; color:var(--dim); }
+
+  /* ---- expression FX rack ---- */
+  #fx {
+    flex:0 0 auto;
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    gap:6px;
+    padding:4px 14px 4px;
+  }
+  .chip {
+    background:var(--panel);
+    border:1px solid var(--edge);
+    border-radius:10px;
+    padding:5px 2px 4px;
+    display:flex; flex-direction:column; align-items:center; gap:1px;
+    opacity:0.4;
+    transition:opacity 0.1s linear, box-shadow 0.1s linear, border-color 0.1s;
+    position:relative;
+    overflow:hidden;
+  }
+  .chip .ico { font-size:16px; line-height:1; }
+  .chip .lbl { font-size:7px; letter-spacing:0.12em; text-transform:uppercase; color:var(--dim); }
+  .chip .amt {
+    position:absolute; left:0; bottom:0; height:3px; width:0%;
+    background:var(--sus);
+  }
+  .chip.hot {
+    opacity:1;
+    border-color:var(--sus);
+    box-shadow:0 0 14px rgba(176,107,255,0.45), inset 0 0 10px rgba(176,107,255,0.12);
+  }
+  .chip.hot .lbl { color:var(--text); }
+  #chip-echo.hot, #chip-oct.hot { border-color:var(--maj); box-shadow:0 0 14px rgba(255,181,69,0.45), inset 0 0 10px rgba(255,181,69,0.12); }
+  #chip-echo.hot .amt, #chip-oct.hot .amt { background:var(--maj); }
+
+  /* ---- arp panel ---- */
+  #arp {
+    flex:0 0 auto;
+    display:flex; gap:8px; align-items:stretch;
+    padding:2px 14px 6px;
+  }
+  .apod {
+    background:var(--panel); border:1px solid var(--edge); border-radius:10px;
+    padding:4px 10px 2px;
+    display:flex; flex-direction:column;
+    flex:1;
+  }
+  .apod label { font-size:8px; letter-spacing:0.16em; text-transform:uppercase; color:var(--dim);
+    display:flex; justify-content:space-between; }
+  .apod label output { color:var(--text); font-family:ui-monospace,monospace; }
+  #arp-toggle {
+    flex:0 0 auto;
+    padding:0 18px;
+    font-size:12px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase;
+    background:var(--panel); color:var(--dim);
+    border:1px solid var(--edge); border-radius:10px;
+  }
+  #arp-toggle.on {
+    color:#0d0a16; background:linear-gradient(135deg, var(--sus), var(--min));
+    border-color:transparent;
+  }
+  input[type=range] { -webkit-appearance:none; width:100%; height:22px; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height:4px; background:#000; border:1px solid var(--edge); border-radius:2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:19px; height:19px; margin-top:-8px;
+    background:radial-gradient(circle at 35% 30%, #d9c9ff, var(--sus) 75%);
+    border:1px solid #000; border-radius:50%;
+  }
+
+  /* ---- chord pads ---- */
+  #pads {
+    flex:1 1 auto;
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    grid-auto-rows:1fr;
+    gap:7px;
+    padding:2px 14px 12px;
+    min-height:0;
+  }
+  .pad {
+    border-radius:15px;
+    background:linear-gradient(180deg, #1d1633, var(--panel));
+    border:1px solid var(--edge);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px;
+    touch-action:none;
+  }
+  .pad .deg { font-size:22px; font-weight:800; }
+  .pad .nm { font-size:9px; letter-spacing:0.2em; color:var(--dim); }
+  .pad.active {
+    background:linear-gradient(180deg, #3a2a68, #241a45);
+    border-color:var(--sus);
+    box-shadow:0 0 22px rgba(176,107,255,0.35), inset 0 0 18px rgba(176,107,255,0.15);
+  }
+  .pad.active.MAJOR { border-color:var(--maj); box-shadow:0 0 22px rgba(255,181,69,0.35), inset 0 0 18px rgba(255,181,69,0.12); }
+  .pad.active.MINOR { border-color:var(--min); box-shadow:0 0 22px rgba(91,141,255,0.35), inset 0 0 18px rgba(91,141,255,0.12); }
+  .pad:last-child { grid-column:1 / -1; }
+
+  #boot {
+    position:fixed; inset:0; z-index:30;
+    background:rgba(13,10,22,0.95);
+    display:flex; flex-direction:column; gap:12px;
+    align-items:center; justify-content:center;
+    padding:24px; text-align:center;
+  }
+  #boot p { font-size:13px; color:var(--dim); max-width:330px; line-height:1.55; }
+  #boot .cheat { font-size:12px; color:var(--text); max-width:330px; line-height:1.7; text-align:left; }
+  #boot button {
+    padding:16px 32px; font-size:15px; font-weight:700;
+    letter-spacing:0.08em; text-transform:uppercase;
+    background:linear-gradient(135deg, var(--maj), var(--sus));
+    color:#0d0a16; border:none; border-radius:10px;
+  }
+  #boot.hidden { display:none; }
+  #status {
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    background:#2a1020; color:#ffb3c1;
+    font-family:ui-monospace,monospace; font-size:10px; line-height:1.5;
+    padding:6px 10px; white-space:pre-wrap;
+    display:none;
+  }
+  #status.show { display:block; }
+  #logbtn {
+    position:fixed; top:8px; right:8px; z-index:50;
+    width:38px; height:38px; border-radius:50%;
+    background:#2a1020; color:#ffb3c1; border:1px solid #5a2a40;
+    font-size:17px;
+  }
+  #logpanel {
+    position:fixed; inset:0; z-index:60;
+    background:rgba(8,6,14,0.97);
+    display:none; flex-direction:column; gap:8px; padding:12px;
+  }
+  #logpanel.show { display:flex; }
+  #logtext {
+    flex:1; overflow:auto;
+    background:#000; color:#9fe8c9;
+    font-family:ui-monospace,monospace; font-size:10px; line-height:1.5;
+    padding:8px; border-radius:6px; white-space:pre-wrap;
+    user-select:text; -webkit-user-select:text;
+  }
+  #logpanel .row { display:flex; gap:8px; }
+  #logpanel button {
+    flex:1; padding:12px; font-size:12px; font-weight:700;
+    letter-spacing:0.08em; text-transform:uppercase;
+    background:#63c7a6; color:#0d0a16; border:none; border-radius:8px;
+  }
+  #logpanel button.dim { background:#2a2145; color:#e8e4f2; }
+  #boot .err { color:#ff7a7a; font-size:12px; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div id="cam">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="camstate">camera off</div>
+    <div id="fdbg"></div>
+  </div>
+  <div id="expr">
+    <div id="quality" class="SUS"><span class="face" id="face">&#128528;</span><span id="qname">SUS</span></div>
+    <div id="moodtrack"><div id="moodcursor"></div></div>
+    <div id="moodlabels"><span>frown=minor</span><span>neutral=sus</span><span>smile=major</span></div>
+  </div>
+</div>
+
+<div id="fx">
+  <div class="chip" id="chip-bloom"><span class="ico">&#128558;</span><span class="lbl">bloom</span><div class="amt"></div></div>
+  <div class="chip" id="chip-oct"><span class="ico">&#11014;&#65039;</span><span class="lbl">octave</span><div class="amt"></div></div>
+  <div class="chip" id="chip-fat"><span class="ico">&#128033;</span><span class="lbl">fat</span><div class="amt"></div></div>
+  <div class="chip" id="chip-drive"><span class="ico">&#128548;</span><span class="lbl">drive</span><div class="amt"></div></div>
+  <div class="chip" id="chip-echo"><span class="ico">&#128521;</span><span class="lbl">echo</span><div class="amt"></div></div>
+</div>
+
+<div id="arp">
+  <button id="arp-toggle">Arp</button>
+  <div class="apod">
+    <label>Rate <output id="o-rate">6/s</output><span id="dbl" style="color:var(--maj);display:none">&#9889;2&times;</span></label>
+    <input type="range" id="s-rate" min="2" max="24" value="6">
+  </div>
+  <div class="apod">
+    <label>Chaos <output id="o-chaos">0%</output></label>
+    <input type="range" id="s-chaos" min="0" max="100" value="0">
+  </div>
+</div>
+
+<div id="pads"></div>
+
+<div id="status"></div>
+<button id="logbtn">&#128030;</button>
+<div id="logpanel">
+  <div id="logtext"></div>
+  <div class="row">
+    <button id="logcopy">Copy all</button>
+    <button id="logclose" class="dim">Close</button>
+  </div>
+</div>
+<div id="boot">
+  <p>Tap a chord pad, then conduct with your face:</p>
+  <div class="cheat">
+    &#128516; smile = major &nbsp;&middot;&nbsp; &#9785;&#65039; frown = minor &nbsp;&middot;&nbsp; &#128528; neutral = sus<br>
+    &#128558; mouth open = bloom &nbsp;&middot;&nbsp; &#129320; brows up = octave lift<br>
+    &#128033; puff cheeks = fat sub<br>
+    &#128548; sneer = drive &nbsp;&middot;&nbsp; &#128521; wink or shut eyes ~&frac12;s = echo on/off<br>
+    &#128562; eyes wide (arp on) = double-time
+  </div>
+  <p style="font-size:10px;color:#7d7693">build v7 &middot; 2026-07-21</p>
+  <p id="booterr" class="err"></p>
+  <button id="start">Camera on &middot; play</button>
+</div>
+
+<script type="module">
+  // ---- diagnostics: everything lands on screen ----
+  const LOG = [];
+  function logLine(tag, args) {
+    const txt = Array.from(args).map(a => {
+      if (a instanceof Error) return a.message + (a.stack ? '\n' + a.stack : '');
+      if (typeof a === 'object') { try { return JSON.stringify(a); } catch { return String(a); } }
+      return String(a);
+    }).join(' ');
+    LOG.push(new Date().toISOString().slice(11,23) + ' ' + tag + ' ' + txt);
+    if (LOG.length > 500) LOG.shift();
+    const lt = document.getElementById('logtext');
+    if (lt && document.getElementById('logpanel').classList.contains('show')) {
+      lt.textContent = LOG.join('\n'); lt.scrollTop = lt.scrollHeight;
+    }
+  }
+  ['log','warn','error','info'].forEach(k => {
+    const orig = console[k].bind(console);
+    console[k] = (...a) => { logLine(k.toUpperCase().padEnd(5), a); orig(...a); };
+  });
+  console.log('boot: build v7', navigator.userAgent);
+  const statusEl = () => document.getElementById('status');
+  function stage(msg, isErr=false) {
+    logLine(isErr ? 'STAGE-ERR' : 'STAGE', [msg]);
+    const el = statusEl();
+    el.classList.add('show');
+    el.textContent = (isErr ? '\u274C ' : '\u2699\uFE0F ') + msg;
+    if (!isErr && msg === 'ready') setTimeout(() => el.classList.remove('show'), 1500);
+  }
+  window.addEventListener('error', e => { logLine('WINERR', [e.message, (e.filename||'')+':'+e.lineno+':'+e.colno, e.error && e.error.stack || '']); stage('JS error: ' + e.message + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno, true); });
+  window.addEventListener('unhandledrejection', e => { logLine('REJECT', [e.reason && e.reason.message || e.reason, e.reason && e.reason.stack || '']); stage('async error: ' + (e.reason && e.reason.message || e.reason), true); });
+
+  // ---------- music ----------
+  const ROOTS = [130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94]; // C3..B3
+  const DEG   = ['I','II','III','IV','V','VI','VII'];
+  const NAMES = ['C','D','E','F','G','A','B'];
+  const VOICE = [0, 7, 12, 16, 19, 26];
+  const COLOR_IDX = 3;
+  const COLOR = { MAJOR:16, MINOR:15, SUS:17 };
+  const VGAIN = [0.30, 0.22, 0.18, 0.26, 0.14, 0.07];
+  const st = (f, semi) => f * Math.pow(2, semi/12);
+
+  let ctx, filter, driveShaper, driveIn, master, delayNode, delayWet, delayFb;
+  let vibLFO, vibGain, subOsc, subGain;
+  let voices = [];
+  let chordIdx = -1, quality = 'SUS';
+  let arpOn = false, arpRate = 6, chaos = 0;
+  // face-driven state
+  let octLift = false, echoOn = false, doubleTime = false;
+  let fx = { bloom:0, fat:0, drive:0 };
+
+  const $ = id => document.getElementById(id);
+
+  function buildAudio() {
+    ctx = new AudioContext({ latencyHint:'interactive' });
+
+    filter = ctx.createBiquadFilter();
+    filter.type='lowpass'; filter.frequency.value=1000; filter.Q.value=0.6;
+
+    // drive: variable pre-gain into tanh shaper, post-gain compensates
+    driveIn = ctx.createGain(); driveIn.gain.value = 1;
+    driveShaper = ctx.createWaveShaper();
+    const curve = new Float32Array(512);
+    for (let i=0;i<512;i++){ const x=i/256-1; curve[i]=Math.tanh(1.8*x); }
+    driveShaper.curve = curve;
+    const drivePost = ctx.createGain(); drivePost.gain.value = 0.8;
+
+    master = ctx.createGain(); master.gain.value=0.55;
+    const comp = ctx.createDynamicsCompressor();
+
+    // echo: feedback delay on a send
+    delayNode = ctx.createDelay(1.0); delayNode.delayTime.value = 0.32;
+    delayFb = ctx.createGain(); delayFb.gain.value = 0.42;
+    delayWet = ctx.createGain(); delayWet.gain.value = 0;
+    delayNode.connect(delayFb).connect(delayNode);
+    delayNode.connect(delayWet);
+
+    filter.connect(driveIn).connect(driveShaper).connect(drivePost);
+    drivePost.connect(master);
+    drivePost.connect(delayNode);
+    delayWet.connect(master);
+    master.connect(comp).connect(ctx.destination);
+
+    // vibrato LFO -> every oscillator's detune
+    vibLFO = ctx.createOscillator(); vibLFO.frequency.value = 5.5;
+    vibGain = ctx.createGain(); vibGain.gain.value = 0;
+    vibLFO.connect(vibGain); vibLFO.start();
+
+    for (let v=0; v<VOICE.length; v++) {
+      const gain = ctx.createGain(); gain.gain.value = 0;
+      gain.connect(filter);
+      const oscs = [-6, 6].map(cents => {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.detune.value = cents;
+        o.frequency.value = 220;
+        const g = ctx.createGain(); g.gain.value = 0.5;
+        o.connect(g).connect(gain);
+        vibGain.connect(o.detune);
+        o.start();
+        return o;
+      });
+      voices.push({ oscs, gain });
+    }
+
+    // fat sub: sine an octave below the root
+    subOsc = ctx.createOscillator(); subOsc.type='sine'; subOsc.frequency.value=65;
+    subGain = ctx.createGain(); subGain.gain.value=0;
+    subOsc.connect(subGain).connect(filter);
+    vibGain.connect(subOsc.detune);
+    subOsc.start();
+  }
+
+  function chordFreqs() {
+    const root = ROOTS[chordIdx] * (octLift ? 2 : 1);
+    return VOICE.map((semi, i) => st(root, i===COLOR_IDX ? COLOR[quality] : semi));
+  }
+
+  function applyChord(smooth=true) {
+    if (!ctx || chordIdx < 0) return;
+    const t = ctx.currentTime, tc = smooth ? 0.03 : 0.005;
+    const fs = chordFreqs();
+    voices.forEach((v, i) => v.oscs.forEach(o => o.frequency.setTargetAtTime(fs[i], t, tc)));
+    subOsc.frequency.setTargetAtTime(fs[0]/2, t, tc);
+  }
+
+  function padOn() {
+    const t = ctx.currentTime;
+    voices.forEach((v,i) => v.gain.gain.setTargetAtTime(arpOn ? 0 : VGAIN[i], t, 0.09));
+  }
+  function padOff() {
+    const t = ctx.currentTime;
+    voices.forEach(v => v.gain.gain.setTargetAtTime(0, t, 0.18));
+  }
+
+  // ---------- arpeggiator ----------
+  let arpTimer = null, nextStep = 0, stepIdx = 0, dir = 1;
+  function arpLoop() {
+    if (!ctx) return;
+    const ahead = 0.12;
+    const rate = arpRate * (doubleTime ? 2 : 1);
+    while (nextStep < ctx.currentTime + ahead) {
+      if (chordIdx >= 0) {
+        let v = stepIdx;
+        if (Math.random() < chaos) v = Math.floor(Math.random()*VOICE.length);
+        const voice = voices[v];
+        const fs = chordFreqs();
+        let f = fs[v];
+        if (Math.random() < chaos*0.5) f *= (Math.random()<0.5 ? 2 : 0.5);
+        voice.oscs.forEach(o => o.frequency.setValueAtTime(f, nextStep));
+        const g = voice.gain.gain;
+        g.cancelScheduledValues(nextStep);
+        g.setValueAtTime(0, nextStep);
+        g.linearRampToValueAtTime(VGAIN[v]*1.5, nextStep + 0.008);
+        g.setTargetAtTime(0, nextStep + 0.008, Math.min(0.28, 0.5/rate));
+        stepIdx += dir;
+        if (stepIdx >= VOICE.length-1) dir = -1;
+        else if (stepIdx <= 0) dir = 1;
+      }
+      nextStep += 1/rate;
+    }
+  }
+  function setArp(on) {
+    arpOn = on;
+    $('arp-toggle').classList.toggle('on', on);
+    if (!ctx) return;
+    if (on) {
+      nextStep = ctx.currentTime + 0.05;
+      stepIdx = 0; dir = 1;
+      voices.forEach(v => v.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05));
+      arpTimer = setInterval(arpLoop, 25);
+    } else {
+      clearInterval(arpTimer); arpTimer = null;
+      if (chordIdx >= 0) { applyChord(false); padOn(); }
+    }
+  }
+
+  // ---------- chord pads ----------
+  const padsBox = $('pads');
+  const padEls = [];
+  ROOTS.forEach((_, i) => {
+    const p = document.createElement('div');
+    p.className='pad';
+    p.innerHTML = `<div class="deg">${DEG[i]}</div><div class="nm">${NAMES[i]}</div>`;
+    p.addEventListener('pointerdown', () => {
+      if (!ctx) return;
+      if (chordIdx === i) {
+        chordIdx = -1;
+        p.classList.remove('active');
+        padOff();
+        return;
+      }
+      padEls.forEach(x => x.classList.remove('active'));
+      chordIdx = i;
+      p.classList.add('active', quality);
+      applyChord(true);
+      if (!arpOn) padOn();
+    });
+    padsBox.appendChild(p);
+    padEls.push(p);
+  });
+
+  function paintQuality() {
+    const q = $('quality');
+    q.className = quality;
+    $('qname').textContent = quality;
+    padEls.forEach((p,i) => {
+      if (i===chordIdx) { p.classList.remove('MAJOR','MINOR'); if (quality!=='SUS') p.classList.add(quality); }
+    });
+  }
+
+  // chip helper: analog amount 0..1, plus explicit on/off for toggles
+  function chip(id, amt, on = amt > 0.25) {
+    const el = $(id);
+    el.classList.toggle('hot', on);
+    el.querySelector('.amt').style.width = Math.round(Math.min(1,amt)*100) + '%';
+  }
+
+  // ---------- face tracking ----------
+  let landmarker = null, video = $('video');
+  const sm = {};   // smoothed blendshape values
+  const S = (k, v, a=0.3) => sm[k] = (sm[k]||0) + (v - (sm[k]||0))*a;
+
+  async function initFace() {
+    stage('importing mediapipe bundle\u2026');
+    const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+    stage('loading wasm runtime\u2026');
+    const files = await vision.FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    stage('loading face model\u2026');
+    landmarker = await vision.FaceLandmarker.createFromOptions(files, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO',
+      outputFaceBlendshapes: true,
+      numFaces: 1
+    });
+    console.log('landmarker created OK');
+    stage('ready');
+  }
+
+  const bs = (cats, name) => {
+    const c = cats.find(x => x.categoryName === name);
+    return c ? c.score : 0;
+  };
+
+  // wink detection state
+  let winkFrames = 0, winkCooldown = 0, shutFrames = 0;
+
+  let lastVT = -1;
+  function faceLoop() {
+    requestAnimationFrame(faceLoop);
+    if (!landmarker || video.readyState < 2) return;
+    if (video.currentTime === lastVT) return;
+    lastVT = video.currentTime;
+    const res = landmarker.detectForVideo(video, performance.now());
+    if (!res.faceBlendshapes || !res.faceBlendshapes.length) return;
+    const c = res.faceBlendshapes[0].categories;
+    const t = ctx ? ctx.currentTime : 0;
+
+    // ---- smooth raw signals ----
+    S('smile', (bs(c,'mouthSmileLeft')+bs(c,'mouthSmileRight'))/2);
+    S('frown', Math.max((bs(c,'mouthFrownLeft')+bs(c,'mouthFrownRight'))/2,
+                        (bs(c,'browDownLeft')+bs(c,'browDownRight'))/2*0.9));
+    S('jaw',   bs(c,'jawOpen'));
+    S('brow',  bs(c,'browInnerUp'));            // inner only: outer fires with wide eyes
+    S('cheek', bs(c,'cheekPuff'));
+    S('sneer', Math.max((bs(c,'noseSneerLeft')+bs(c,'noseSneerRight'))/2,
+                        (bs(c,'mouthUpperUpLeft')+bs(c,'mouthUpperUpRight'))/2));  // snarl: upper lip detects far better
+    S('wide',  (bs(c,'eyeWideLeft')+bs(c,'eyeWideRight'))/2);
+    const blinkL = bs(c,'eyeBlinkLeft'), blinkR = bs(c,'eyeBlinkRight');
+
+    // ---- quality (mood axis with hysteresis) ----
+    const mood = Math.max(-1, Math.min(1, sm.smile*1.6 - sm.frown*1.8));
+    $('moodcursor').style.left = ((mood+1)/2*100) + '%';
+    let q = quality;
+    if (quality !== 'MAJOR' && mood > 0.28) q = 'MAJOR';
+    else if (quality !== 'MINOR' && mood < -0.22) q = 'MINOR';
+    else if (quality === 'MAJOR' && mood < 0.14) q = 'SUS';
+    else if (quality === 'MINOR' && mood > -0.10) q = 'SUS';
+    if (q !== quality) { quality = q; paintQuality(); applyChord(); }
+
+    // ---- continuous effects ----
+    fx.bloom = Math.min(1, sm.jaw*1.7);                 // mouth open
+    fx.fat   = Math.min(1, Math.max(0,(sm.cheek-0.02)*8));  // cheekPuff barely registers on many faces: extreme gain
+    fx.drive = Math.min(1, Math.max(0,(sm.sneer-0.05)*3));   // snarl
+
+    if (ctx) {
+      filter.frequency.setTargetAtTime(900 + fx.bloom*5200, t, 0.05);
+      master.gain.setTargetAtTime(0.55 + fx.bloom*0.35, t, 0.05);
+      subGain.gain.setTargetAtTime(fx.fat*0.5, t, 0.08);
+      const spread = 6 + fx.fat*16;
+      voices.forEach(v => v.oscs.forEach((o,k) =>
+        o.detune.setTargetAtTime(k===0?-spread:spread, t, 0.08)));
+      driveIn.gain.setTargetAtTime(1 + fx.drive*7, t, 0.05);
+    }
+
+    // ---- octave lift: brows up (latched with hysteresis) ----
+    if (!octLift && sm.brow > 0.5 && sm.wide < 0.45) { octLift = true; applyChord(); }
+    else if (octLift && (sm.brow < 0.30 || sm.wide > 0.6)) { octLift = false; applyChord(); }
+
+    // ---- wink -> toggle echo (one eye shut, other open, sustained) ----
+    if (winkCooldown > 0) winkCooldown--;
+    const wink = Math.abs(blinkL - blinkR) > 0.3 && Math.max(blinkL, blinkR) > 0.55;
+    winkFrames = wink ? winkFrames+1 : 0;
+    // alternative: hold BOTH eyes shut ~0.5s (way more reliable than winking)
+    const bothShut = blinkL > 0.7 && blinkR > 0.7;
+    shutFrames = bothShut ? shutFrames+1 : 0;
+    if ((winkFrames >= 2 || shutFrames === 15) && winkCooldown === 0) {
+      echoOn = !echoOn;
+      winkCooldown = 25;                                // ~0.8s refractory
+      if (ctx) delayWet.gain.setTargetAtTime(echoOn ? 0.5 : 0, t, 0.1);
+    }
+
+    // ---- eyes wide -> double-time arp ----
+    if (!doubleTime && sm.wide > 0.55) doubleTime = true;
+    else if (doubleTime && sm.wide < 0.35) doubleTime = false;
+    $('dbl').style.display = (doubleTime && arpOn) ? 'inline' : 'none';
+
+    // ---- visual rack ----
+    chip('chip-bloom', fx.bloom);
+    chip('chip-oct',   octLift?1:sm.brow, octLift);
+    chip('chip-fat',   fx.fat);
+    chip('chip-drive', fx.drive);
+    chip('chip-echo',  echoOn?1:0, echoOn);
+
+    // ---- debug overlay (tap camera to toggle) ----
+    if ($('fdbg').classList.contains('show')) {
+      $('fdbg').textContent =
+        `smile ${(sm.smile||0).toFixed(2)}\nfrown ${(sm.frown||0).toFixed(2)}\njaw   ${(sm.jaw||0).toFixed(2)}\n` +
+        `brow  ${(sm.brow||0).toFixed(2)}\ncheek ${(sm.cheek||0).toFixed(2)}\n` +
+        `sneer ${(sm.sneer||0).toFixed(2)}\nwide  ${(sm.wide||0).toFixed(2)}\nbL/bR ${blinkL.toFixed(2)}/${blinkR.toFixed(2)}`;
+    }
+
+    // ---- face emoji mirrors the loudest expression ----
+    const faceEl = $('face');
+    if (fx.bloom > 0.4)      faceEl.textContent = '\u{1F62E}';
+    else if (fx.fat > 0.4)   faceEl.textContent = '\u{1F421}';
+    else if (fx.drive > 0.4) faceEl.textContent = '\u{1F624}';
+    else faceEl.textContent = quality==='MAJOR' ? '\u{1F604}' : quality==='MINOR' ? '\u{2639}\uFE0F' : '\u{1F610}';
+  }
+
+  // ---------- log panel ----------
+  document.getElementById('logbtn').addEventListener('click', () => {
+    const p = document.getElementById('logpanel');
+    p.classList.toggle('show');
+    if (p.classList.contains('show')) {
+      const lt = document.getElementById('logtext');
+      lt.textContent = LOG.join('\n') || '(no logs yet)';
+      lt.scrollTop = lt.scrollHeight;
+    }
+  });
+  document.getElementById('logclose').addEventListener('click', () =>
+    document.getElementById('logpanel').classList.remove('show'));
+  document.getElementById('logcopy').addEventListener('click', async () => {
+    const txt = LOG.join('\n');
+    try { await navigator.clipboard.writeText(txt); document.getElementById('logcopy').textContent = 'Copied!'; }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+      document.getElementById('logcopy').textContent = 'Copied (fallback)';
+    }
+    setTimeout(() => document.getElementById('logcopy').textContent = 'Copy all', 1500);
+  });
+
+  // ---------- controls ----------
+  $('cam').addEventListener('pointerdown', () => $('fdbg').classList.toggle('show'));
+  $('arp-toggle').addEventListener('click', () => setArp(!arpOn));
+  $('s-rate').addEventListener('input', e => { arpRate = +e.target.value; $('o-rate').textContent = arpRate+'/s'; });
+  $('s-chaos').addEventListener('input', e => { chaos = +e.target.value/100; $('o-chaos').textContent = e.target.value+'%'; });
+
+  // ---------- boot ----------
+  $('start').addEventListener('click', async () => {
+    try {
+      buildAudio();
+      await ctx.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false
+      });
+      console.log('camera stream ok:', stream.getVideoTracks()[0] && stream.getVideoTracks()[0].label);
+      video.srcObject = stream;
+      $('camstate').classList.add('hidden');
+      $('boot').classList.add('hidden');
+      faceLoop();
+      await initFace().catch(err => stage('init failed: ' + err.message, true));
+    } catch (err) {
+      $('booterr').textContent = 'Setup failed: ' + err.message +
+        ' (camera permission? network for the face model?)';
+    }
+  });
+</script>
+</body>
+</html>
