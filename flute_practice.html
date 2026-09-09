@@ -100,6 +100,13 @@ textarea{font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;width:100%;padding
 .msg{margin-top:10px;min-height:22px;font-weight:600}
 .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)} .msg.warn{color:var(--warn)}
 canvas#trail{width:100%;height:170px;display:block;margin-top:10px;border-radius:10px;background:var(--bg)}
+/* Hero view: falling notes on pitch lanes, drawn from the same run timeline and live scoring as the staff */
+canvas#hero{width:100%;height:220px;display:block;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+#stageMain{display:flex;flex-direction:column;gap:10px;min-width:0}
+#stageMain.heroonly canvas#hero{height:340px}
+.viewsel{display:inline-flex;background:var(--chip);border-radius:999px;padding:2px}
+.viewsel button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;cursor:pointer}
+.viewsel button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .controls{display:grid;gap:14px}
 .group h2{font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .group-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
@@ -156,9 +163,12 @@ footer b{color:var(--ink)}
 </header>
 <main>
   <section class="card stage" id="stage">
-    <div class="stage-head"><div class="phaserow"><div id="phase" class="phase"></div><button id="micState" class="micchip" type="button"></button></div><div id="modeHelp" class="help"></div></div>
+    <div class="stage-head"><div class="phaserow"><div id="phase" class="phase"></div><button id="micState" class="micchip" type="button"></button><div class="viewsel" id="viewSel" hidden><button data-view="staff" data-i18n="view_staff"></button><button data-view="both" data-i18n="view_both"></button><button data-view="hero" data-i18n="view_hero"></button></div></div><div id="modeHelp" class="help"></div></div>
     <div class="stagegrid" id="stageGrid">
-      <div id="staffWrap" class="paper"><svg id="staff" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div id="stageMain">
+        <div id="staffWrap" class="paper"><svg id="staff" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <canvas id="hero" hidden></canvas>
+      </div>
     </div>
     <div class="monitor">
       <div class="mon-block"><div class="lbl" data-i18n="target">Target</div><div id="targetName" class="big">–</div><div id="fingering" class="fing"></div></div>
@@ -207,6 +217,7 @@ footer b{color:var(--ink)}
         <label class="inline"><span data-i18n="timesig">Time</span><select data-set="bpb"><option value="4">4/4</option><option value="3">3/4</option><option value="2">2/4</option></select></label>
         <label class="inline"><span data-i18n="bars">Bars</span><select data-set="bars"><option>1</option><option>2</option><option>4</option><option>8</option></select></label>
         <label class="inline"><span data-i18n="maxint">Leaps</span><select data-set="maxInt"><option value="2" data-i18n="int_step"></option><option value="4" data-i18n="int_third"></option><option value="7" data-i18n="int_fifth"></option><option value="99" data-i18n="int_any"></option></select></label>
+        <label class="inline"><input type="checkbox" data-set="sync"><span data-i18n="sync"></span></label>
       </div>
     </div>
     <div class="group" id="gTempo">
@@ -321,12 +332,14 @@ const CORE = (() => {
   };
   const CELL_ORDER = ['w','hd','h','q','ee','qde','qr','hr'];
   const CELL_WEIGHT = {w:1, hd:1.2, h:2, qde:1.4, q:3, ee:2, qr:0.8, hr:0.4};
-  function cellAllowedAt(id, pos, bpb){
+  // sync: allow syncopation – a half note (or half rest, dotted quarter + eighth) may start on any beat, e.g. q h q in 4/4;
+  // without it long cells only start on beats 1 and 3, the beginner convention
+  function cellAllowedAt(id, pos, bpb, sync){
     const len = CELLS[id].len; if(pos+len > bpb) return false;
     switch(id){
       case 'w': return bpb===4 && pos===0;
       case 'hd': return (bpb===3 && pos===0) || (bpb===4 && pos<=1);
-      case 'h': case 'hr': case 'qde': return bpb===4 ? pos%2===0 : bpb===3 ? pos<=1 : pos===0;
+      case 'h': case 'hr': case 'qde': return sync ? true : bpb===4 ? pos%2===0 : bpb===3 ? pos<=1 : pos===0;
       default: return true;
     }
   }
@@ -346,7 +359,7 @@ const CORE = (() => {
     for(let b=0;b<bars;b++){
       let pos=0, prevRest=false; const last = b===bars-1;
       while(pos<bpb){
-        let cand = cells.filter(id => cellAllowedAt(id,pos,bpb) && !(CELLS[id].items[0].rest && (prevRest || last)));
+        let cand = cells.filter(id => cellAllowedAt(id,pos,bpb,o.sync) && !(CELLS[id].items[0].rest && (prevRest || last)));
         if(!cand.length) cand = ['q'];
         const rem = bpb-pos; let id;
         const full = cand.filter(c => CELLS[c].len===rem && rem>=2 && !CELLS[c].items[0].rest);
@@ -519,12 +532,12 @@ en: {
   help_ear:'You only hear the phrase – the notes stay hidden. Listen (then a count-in, if on), play it back in time, and with auto-continue the next phrase follows straight away while your result is shown.', ear_reps:'Hear the phrase',
   help_sight:'Count-in, then play the notes in tempo. The blue line shows where you are.',
   help_long:'Hold the note steady and even. The line shows whether you are sharp (too much air) or flat.',
-  notes:'Notes', rhythm:'Rhythm', tempo:'Tempo', timesig:'Time', bars:'Bars', maxint:'Leaps',
+  notes:'Notes', rhythm:'Rhythm', tempo:'Tempo', timesig:'Time', bars:'Bars', maxint:'Leaps', sync:'Syncopation (long notes on any beat)',
   int_step:'steps only', int_third:'up to a third', int_fifth:'up to a fifth', int_any:'any',
   countin:'Count-in', metro:'Metronome', ladder:'Tempo ladder', playalong:'Play along quietly (headphones!)', hide:'Hide the notes', autonext:'Auto-continue', loop:'Loop (repeat after a count-in)',
   hint_after:'Show the note name after', never:'never', duration:'Duration',
   btn_new:'New', btn_listen:'Listen', btn_hear:'Hear it', btn_play:'Play', btn_stop:'Stop', btn_start:'Start', btn_next:'Next card',
-  target:'Target', heard:'Heard', level:'Level', beat:'Beat',
+  target:'Target', heard:'Heard', level:'Level', beat:'Beat', view_staff:'Staff', view_both:'Staff + Hero', view_hero:'Hero', precision:(ms)=>`precision ±${ms} ms`, hero_scroll:'scroll / drag to review',
   results:'Result', reset:'Reset progress', reset_hint:'Forgets how well each note went (used for unlocking levels and for choosing weaker notes more often).',
   settings:'Settings', instrument:'Instrument', inst_sop:'Soprano / sopranino (sounds an octave higher)', inst_alt:'Alto / tenor (sounds as written)',
   ignoreoct:'Ignore octave (only the note name counts)', tol:'Pitch tolerance', gate:'Microphone sensitivity', latency:'Latency',
@@ -562,12 +575,12 @@ sl: {
   help_ear:'Vajo samo slišiš – note so skrite. Poslušaj (nato odštevanje, če je vklopljeno), ponovi v ritmu, in s samodejnim nadaljevanjem takoj sledi naslednja vaja, medtem ko vidiš svoj rezultat.', ear_reps:'Predvajaj vajo',
   help_sight:'Odštevanje, nato zaigraš note v tempu. Modra črta kaže, kje si.',
   help_long:'Drži ton mirno in enakomerno. Črta kaže, ali igraš previsoko (preveč zraka) ali prenizko.',
-  notes:'Toni', rhythm:'Ritem', tempo:'Tempo', timesig:'Takt', bars:'Takti', maxint:'Skoki',
+  notes:'Toni', rhythm:'Ritem', tempo:'Tempo', timesig:'Takt', bars:'Takti', maxint:'Skoki', sync:'Sinkopa (dolge note na katerikoli dobi)',
   int_step:'samo koraki', int_third:'do terce', int_fifth:'do kvinte', int_any:'poljubno',
   countin:'Odštevanje', metro:'Metronom', ladder:'Tempo lestev', playalong:'Tiho predvajaj zraven (slušalke!)', hide:'Skrij note', autonext:'Samodejno naprej', loop:'Zanka (ponovi po odštevanju)',
   hint_after:'Pokaži ime note po', never:'nikoli', duration:'Trajanje',
   btn_new:'Novo', btn_listen:'Poslušaj', btn_hear:'Zaigraj mi', btn_play:'Igraj', btn_stop:'Stop', btn_start:'Začni', btn_next:'Naslednja kartica',
-  target:'Cilj', heard:'Zaigrano', level:'Glasnost', beat:'Doba',
+  target:'Cilj', heard:'Zaigrano', level:'Glasnost', beat:'Doba', view_staff:'Note', view_both:'Note + Hero', view_hero:'Hero', precision:(ms)=>`natančnost ±${ms} ms`, hero_scroll:'pomikaj za pregled',
   results:'Rezultat', reset:'Ponastavi napredek', reset_hint:'Pozabi, kako je šel vsak ton (uporablja se za odklepanje stopenj in pogostejše ponavljanje šibkejših tonov).',
   settings:'Nastavitve', instrument:'Inštrument', inst_sop:'Sopran / sopranino (zveni oktavo višje)', inst_alt:'Alt / tenor (zveni, kot je zapisano)',
   ignoreoct:'Prezri oktavo (šteje samo ime tona)', tol:'Toleranca višine', gate:'Občutljivost mikrofona', latency:'Zamik (latenca)',
@@ -599,7 +612,7 @@ sl: {
 // ===== settings & stats =====
 const LS_SET='bfp-settings-v3', LS_STATS='bfp-stats-v1';
 const DEFAULTS = { lang:'en', mode:'flash', transpose:12, ignoreOctave:false, tol:50, gateDb:-45, latency:40, showFingering:false, showNames:false, maxBars:4,
-  song:'prva', songText:'', pool:['A4','C5'], cells:['q','h'], bpb:4, bars:2, maxInt:4, bpm:72, earReps:1, countIn:true, metro:true, ladder:false, playAlong:false, hideNotes:false, autoNext:true, loop:false, hintDelay:4, longDur:6, longNote:'G4' };
+  song:'prva', songText:'', pool:['A4','C5'], cells:['q','h'], bpb:4, bars:2, maxInt:4, sync:false, view:'staff', bpm:72, earReps:1, countIn:true, metro:true, ladder:false, playAlong:false, hideNotes:false, autoNext:true, loop:false, hintDelay:4, longDur:6, longNote:'G4' };
 function loadJSON(k, d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v && typeof v==='object' ? v : d; }catch(e){ return d; } }
 function saveJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 const S = Object.assign({}, DEFAULTS, loadJSON(LS_SET, {}));
@@ -620,7 +633,7 @@ const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(
 
 // ===== DOM =====
 const svg=$('#staff'), staffWrap=$('#staffWrap'), phaseEl=$('#phase'), helpEl=$('#modeHelp'), targetEl=$('#targetName'), heardEl=$('#heardName'),
-  needle=$('#needle'), centsTxt=$('#centsTxt'), levelEl=$('#level'), gateMark=$('#gateMark'), beatsEl=$('#beats'), trail=$('#trail'), msgEl=$('#msg'), fingEl=$('#fingering');
+  needle=$('#needle'), centsTxt=$('#centsTxt'), levelEl=$('#level'), gateMark=$('#gateMark'), beatsEl=$('#beats'), trail=$('#trail'), hero=$('#hero'), msgEl=$('#msg'), fingEl=$('#fingering');
 const btnNew=$('#btnNew'), btnListen=$('#btnListen'), btnPlay=$('#btnPlay'), btnStop=$('#btnStop'), micState=$('#micState'), langBtn=$('#langBtn'), unlockEl=$('#unlock');
 
 // ===== audio engine =====
@@ -707,6 +720,7 @@ function loop(){
   updateMonitor(frame); if(metroFree.on) metroFreeVisual(ctx.currentTime);
   // a run (including the timing self-test) takes precedence over the mode's own tick
   if(run) runTick(frame); else if(mode==='explore') exploreTick(frame); else if(mode==='flash') flashTick(frame); else if(mode==='long') longTick(frame);
+  if(!hero.hidden) drawHero(ctx.currentTime);
   if(A.clicks.length>400) A.clicks.splice(0,200);
 }
 function isMatch(w,tgt){ let d=w-tgt; if(S.ignoreOctave) d=((d+6)%12+12)%12-6; return Math.abs(d)*100<=S.tol; }
@@ -948,11 +962,11 @@ function relayout(){
   if(!currentPhrase) return;
   const centered = mode==='flash'||mode==='long'||mode==='explore';
   L=layoutPhrase(currentPhrase, {sp:SPX(), width:staffWrap.clientWidth-10, maxBars:S.maxBars, center:centered, noTimeSig:centered, full: mode==='ear'});
-  L.noTimeSig=centered; renderStaff(L);
+  L.noTimeSig=centered; renderStaff(L); if(!hero.hidden) drawHero(A.ctx ? A.ctx.currentTime : 0);
   if(lastResult) applyResultColors(lastResult);
   svg.classList.toggle('hide-notes', notesHidden() && !lastResult && (run!=null || mode==='ear'));
 }
-function genPhrase(){ return generatePhrase({pool:poolNotes(), cells:S.cells, bpb:S.bpb, bars:S.bars, maxInt:S.maxInt, weakness:weaknessMap()}); }
+function genPhrase(){ return generatePhrase({pool:poolNotes(), cells:S.cells, bpb:S.bpb, bars:S.bars, maxInt:S.maxInt, sync:S.sync, weakness:weaknessMap()}); }
 function layoutFor(phrase){ return layoutPhrase(phrase, {sp:SPX(), width:staffWrap.clientWidth-10, maxBars:S.maxBars, center:false, noTimeSig:false, full: mode==='ear'}); }
 function newPhrase(){
   if(mode==='songs'){ loadSong(); return; }
@@ -983,7 +997,7 @@ function startRun(o){
 function buildRun(o, t0, phrase=currentPhrase, layout=L){
   const bpb=phrase.bpb, lenB=phrase.bars*bpb, cin=o.countIn?bpb:0, lreps=o.listen ? (o.listenReps||1) : 0;
   const after = !!(o.countAfterListen && o.listen);   // count-in placed after the listening phase (By ear) instead of before it
-  const R={bpb, lenB, cin, lreps, lb0: o.listen ? (after ? 0 : cin) : null, cb0: after ? lreps*lenB : 0, pb0: o.play ? cin+lreps*lenB : null, tailB:o.tail||0, frames:[], layout, phrase, mode, liveIdx:0, keep:!!o.keep, opts:o, next:null, bpm:S.bpm,
+  const R={bpb, lenB, cin, lreps, lb0: o.listen ? (after ? 0 : cin) : null, cb0: after ? lreps*lenB : 0, pb0: o.play ? cin+lreps*lenB : null, tailB:o.tail||0, frames:[], heard:[], liveItems:[], layout, phrase, mode, liveIdx:0, keep:!!o.keep, opts:o, next:null, bpm:S.bpm,
     segs:[{b:0, t:t0, spb:60/S.bpm}],
     tob(b){ let sg=this.segs[0]; for(const g of this.segs){ if(g.b<=b) sg=g; else break; } return sg.t+(b-sg.b)*sg.spb; },
     beatAt(t){ let sg=this.segs[0]; for(const g of this.segs){ if(g.t<=t) sg=g; else break; } return sg.b+(t-sg.t)/sg.spb; },
@@ -1040,7 +1054,7 @@ function runTick(frame){
   if(R.pb0!=null && now<R.playEnd+0.35){
     setPhase('phase_play'); const beat=b-R.pb0;
     if(beat<R.lenB){ setBeats(Math.floor(beat)%R.bpb, R.bpb); setPlayhead(beat,'play'); }
-    if(now>=R.play0-0.3) R.frames.push(frame);
+    if(now>=R.play0-0.3){ R.frames.push(frame); if(frame.midi!=null) R.heard.push({b:R.beatAt(frame.t)-R.pb0, w:frame.midi-S.transpose}); }
     liveScore(R, frame.t);
     if(frame.midi!=null && curIdx>=0) setGhost(frame.midi-S.transpose, curX+1.4*L.sp, curTop); else setGhost(null);
     return;
@@ -1053,7 +1067,7 @@ function scoreOpts(R){ return {frames:R.frames, onsets:onset.since(R.play0-0.3),
 function liveScore(R, ft){
   const evs=R.layout.events;
   while(R.liveIdx<evs.length){ const e=evs[R.liveIdx]; if(ft < R.tob(R.pb0+e.startBeat+e.d)+0.03) break;
-    colorItem(scoreEvent(evs, R.liveIdx, scoreOpts(R)), e); R.liveIdx++; }
+    const it=scoreEvent(evs, R.liveIdx, scoreOpts(R)); colorItem(it, e); R.liveItems.push(it); R.liveIdx++; }
 }
 function finalizeRun(){
   const R=run; run=null; setPlayhead(null); setGhost(null); setBeats(-1,R.bpb); svg.classList.remove('hide-notes');
@@ -1071,6 +1085,7 @@ function finalizeRun(){
     saveS(); syncInputs();
   }
   renderStats(); noteRecent(res); const issues=showResults(res, R, extra); setPhase('phase_res'); checkUnlock();
+  heroLast={heard:R.heard, phrase:currentPhrase}; heroScroll=0;   // for the Hero review of this pass, starting at the first note
   // loop: straight into a count-in bar and the same phrase again (the last pass stays coloured until the repeat starts);
   // with the tempo ladder on, that is the same phrase at a rising tempo. Otherwise auto-continue waits, then generates a new phrase.
   if(R.next && (S.loop || (mode==='ear' && S.autoNext))) adoptRun(R.next);
@@ -1078,7 +1093,7 @@ function finalizeRun(){
 }
 function showResults(res, R, extra){
   const box=$('#results'); box.hidden=false;
-  let s=`<b>${t('correct_of',res.ok,res.total)}</b> · ${R.bpm} bpm`;
+  let s=`<b>${t('correct_of',res.ok,res.total)}</b> · ${R.bpm} bpm`; if(res.timingAbs!=null) s+=' · '+t('precision', Math.round(res.timingAbs*1000));
   if(res.timingMean!=null){ const ms=Math.round(res.timingMean*1000); s+=` · ${t('timing_avg', Math.abs(ms)<40 ? t('on_time') : `${Math.abs(ms)} ms ${ms>0?t('late'):t('early')}`)}`; }
   $('#resSummary').innerHTML=s;
   const rn=$('#resNotes'); rn.innerHTML='';
@@ -1312,6 +1327,83 @@ function finishTimingTest(R, res){
   if(mode==='flash') flashNext();
 }
 
+// ===== Hero view: falling notes on pitch lanes =====
+// Same data as the staff: the run's beat timeline places each note (bottom edge = its start, height = its length), the live scoring
+// colours it as it crosses the hit line, and the microphone trail shows what was actually played. In By ear the target blocks stay
+// hidden until the result, only the trail is shown. Nothing here is a game score: the only figure is the mean timing error in ms.
+let heroLast=null, heroScroll=0;
+// review scrolling: wheel or drag moves the pass under the hit line (later beats come down)
+function heroPpb(){ const dpr=devicePixelRatio||1; return (hero.height-64*dpr-10*dpr)/((currentPhrase ? currentPhrase.bpb : 4)*1.5); }
+function heroScrollBy(px){ if(run || !lastResult || !currentPhrase) return; const lenB=currentPhrase.bars*currentPhrase.bpb; heroScroll=clamp(heroScroll+px*(devicePixelRatio||1)/heroPpb(), 0, lenB); drawHero(A.ctx ? A.ctx.currentTime : 0); }
+hero.addEventListener('wheel', e=>{ if(run || !lastResult) return; e.preventDefault(); heroScrollBy(e.deltaY); }, {passive:false});
+{ let drag=null; hero.addEventListener('pointerdown', e=>{ if(run || !lastResult) return; drag={y:e.clientY, s:heroScroll}; hero.setPointerCapture(e.pointerId); });
+  hero.addEventListener('pointermove', e=>{ if(!drag) return; heroScroll=drag.s; heroScrollBy(e.clientY-drag.y); drag={y:e.clientY, s:heroScroll}; });
+  hero.addEventListener('pointerup', ()=>{ drag=null; }); hero.addEventListener('pointercancel', ()=>{ drag=null; }); }
+function heroVisible(){ return S.view!=='staff' && (mode==='echo'||mode==='sight'||mode==='ear'||mode==='songs'); }
+function updateView(){
+  const on=heroVisible(); hero.hidden=!on; $('#stageMain').classList.toggle('heroonly', on && S.view==='hero'); staffWrap.hidden = on && S.view==='hero';
+  const sel=$('#viewSel'); sel.hidden=!(mode==='echo'||mode==='sight'||mode==='ear'||mode==='songs'); $$('#viewSel button').forEach(b=>b.classList.toggle('on', b.dataset.view===S.view));
+  if(!staffWrap.hidden) relayout(); if(on) drawHero(A.ctx ? A.ctx.currentTime : 0);
+}
+function heroLanes(){
+  const m=new Map(); const add=n=>{ if(n) m.set(n.midi,n); };
+  if(currentPhrase) currentPhrase.events.forEach(e=>{ if(!e.rest) add(e.note); });
+  if(mode!=='songs') poolNotes().forEach(add);
+  return [...m.values()].sort((a,b)=>a.midi-b.midi);
+}
+function heroCtx(){ const dpr=devicePixelRatio||1; const w=hero.clientWidth, h=hero.clientHeight; if(hero.width!==Math.round(w*dpr)||hero.height!==Math.round(h*dpr)){ hero.width=Math.round(w*dpr); hero.height=Math.round(h*dpr); } return hero.getContext('2d'); }
+function statusColor(st){ return st==='ok' ? cssVar('--ok') : st==='wrong' ? cssVar('--bad') : (st==='octave'||st==='slur') ? cssVar('--warn') : cssVar('--miss'); }
+// returns the number of target blocks drawn (used by the tests to check that By ear hides them)
+function drawHero(now){
+  if(hero.hidden || !currentPhrase) return 0;
+  const c=heroCtx(), W=hero.width, H=hero.height, dpr=devicePixelRatio||1; c.clearRect(0,0,W,H);
+  const lanes=heroLanes(), n=lanes.length; if(!n) return 0;
+  const laneW=W/n, labelH=24*dpr, hitY=H-64*dpr, top=10*dpr; const laneIdx=new Map(lanes.map((l,i)=>[l.midi,i]));
+  c.font=`${12*dpr}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
+  lanes.forEach((ln,i)=>{ if(i){ c.strokeStyle=cssVar('--line'); c.lineWidth=dpr; c.beginPath(); c.moveTo(i*laneW,0); c.lineTo(i*laneW,H-labelH); c.stroke(); } c.fillStyle=cssVar('--muted'); c.fillText(nm(ln), i*laneW+laneW/2, H-labelH/2); });
+  c.strokeStyle=cssVar('--accent'); c.lineWidth=2*dpr; c.globalAlpha=0.85; c.beginPath(); c.moveTo(0,hitY); c.lineTo(W,hitY); c.stroke(); c.globalAlpha=1;
+  const R=run, live = R && R.pb0!=null && R.phrase===currentPhrase, hidden = notesHidden() && !lastResult;
+  const evs=currentPhrase.events, lenB=currentPhrase.bars*currentPhrase.bpb;
+  let pb, ppb, heard=[], items=null, absSum=0, absN=0;
+  if(live){
+    const b=R.beatAt(now); const inListen=R.lb0!=null && b<R.lb0+R.lreps*R.lenB && (b>=R.lb0||R.lb0===0);
+    pb = inListen ? (b-R.lb0)%R.lenB : b-R.pb0; ppb=(hitY-top)/(R.bpb*1.5); heard=R.heard; items=R.liveItems||[];
+  } else {
+    // same scale as live play: before a run the first stretch of the phrase waits above the hit line; after a result the pass is
+    // reviewed by scrolling (wheel / drag), heroScroll being the beat at the hit line
+    ppb=(hitY-top)/(currentPhrase.bpb*1.5); pb = lastResult ? clamp(heroScroll, 0, lenB) : 0;
+    heard=(heroLast && heroLast.phrase===currentPhrase) ? heroLast.heard : []; items=lastResult ? lastResult.items : null;
+  }
+  const yOf=beat=>hitY-(beat-pb)*ppb; const itemOf=i=>items ? items.find(it=>it.i===i) : null;
+  const bw=Math.min(laneW-8*dpr, 110*dpr), bx=li=>li*laneW+(laneW-bw)/2;   // blocks have a maximum width and sit centred in the lane
+  let drawn=0; c.save(); c.beginPath(); c.rect(0,0,W,H-labelH); c.clip();
+  if(!hidden) evs.forEach((e,i)=>{
+    if(e.rest) return; const li=laneIdx.get(e.note.midi); if(li==null) return;
+    const yb=yOf(e.startBeat), yt=yOf(e.startBeat+e.d); if(yb<top-2*dpr || yt>H-labelH) return;
+    const it=itemOf(i); const cur = live && pb>=e.startBeat && pb<e.startBeat+e.d;
+    c.fillStyle = it ? statusColor(it.status==='ok' && it.timing==='slur' ? 'slur' : it.status) : cur ? cssVar('--accent') : cssVar('--chip-on');
+    c.globalAlpha = it ? 0.9 : cur ? 0.95 : 0.55;
+    const x=bx(li), w=bw, h=Math.max(yb-yt-2*dpr, 4*dpr); c.beginPath(); c.roundRect(x, yt+dpr, w, h, 5*dpr); c.fill(); c.globalAlpha=1; drawn++;
+    if(h>=16*dpr){ c.fillStyle=cssVar('--card'); c.fillText(nm(e.note), x+w/2, yb-h/2); }
+    if(it && it.offset!=null && Math.abs(it.offset)>0.03){ const y=yb+it.offset/(R? R.spb : 60/S.bpm)*ppb; c.strokeStyle=it.offset>0?cssVar('--warn'):cssVar('--accent'); c.lineWidth=2*dpr; c.beginPath(); c.moveTo(x,y); c.lineTo(x+w,y); c.stroke(); c.fillStyle=cssVar('--ink'); c.textAlign='left'; c.fillText((it.offset>0?'+':'')+Math.round(it.offset*1000), x+w+3*dpr, y); c.textAlign='center'; }
+    if(it && it.offset!=null && it.status==='ok'){ absSum+=Math.abs(it.offset); absN++; }
+  });
+  // microphone trail: what was actually played, by lane; green when it matches the target sounding at that moment
+  for(const h of heard){ const r=Math.round(h.w); const li=laneIdx.get(r); if(li==null) continue; const y=yOf(h.b); if(y<top||y>hitY+52*dpr) continue;
+    const tgt=evs.find(e=>!e.rest && h.b>=e.startBeat && h.b<e.startBeat+e.d); const okm = tgt && tgt.note.midi===r;
+    c.fillStyle = hidden ? cssVar('--accent') : okm ? cssVar('--ok') : cssVar('--bad'); c.globalAlpha=0.75; const tw=Math.min(bw*0.5, 40*dpr); c.fillRect(bx(li)+(bw-tw)/2, y-1.5*dpr, tw, 3*dpr); c.globalAlpha=1; }
+  c.restore();
+  if(!live && lastResult && lenB>0){   // review: position marker on the right edge
+    const vis=(hitY-top)/ppb, trackH=hitY-top; c.fillStyle=cssVar('--line'); c.fillRect(W-5*dpr, top, 3*dpr, trackH);
+    c.fillStyle=cssVar('--accent'); const th=Math.max(8*dpr, trackH*Math.min(1, vis/(lenB+vis))); c.fillRect(W-5*dpr, top+trackH-th-(trackH-th)*(pb/lenB), 3*dpr, th);
+    c.fillStyle=cssVar('--muted'); c.textAlign='left'; c.fillText(t('hero_scroll'), 8*dpr, 14*dpr); c.textAlign='center';
+  }
+  c.fillStyle=cssVar('--bg'); c.fillRect(0,H-labelH,W,labelH); c.fillStyle=cssVar('--muted'); c.textAlign='center';
+  lanes.forEach((ln,i)=>c.fillText(nm(ln), i*laneW+laneW/2, H-labelH/2));
+  if(absN){ c.fillStyle=cssVar('--muted'); c.textAlign='right'; c.fillText(t('precision', Math.round(1000*absSum/absN)), W-8*dpr, 14*dpr); c.textAlign='center'; }
+  return drawn;
+}
+
 // ===== modes & UI wiring =====
 function updateButtonLabels(){ updateMetroBtn(); btnPlay.textContent = (mode==='sight'||mode==='songs') ? t('btn_play') : mode==='flash' ? t('btn_next') : t('btn_start'); btnNew.textContent=t('btn_new'); btnListen.textContent = mode==='flash' ? t('btn_hear') : t('btn_listen'); btnStop.textContent=t('btn_stop'); }
 function applyMode(){
@@ -1320,7 +1412,8 @@ function applyMode(){
   { const results=$('#results'); $('#stage').classList.toggle('ear', mode==='ear'); if(mode==='ear'){ $('#stageGrid').appendChild(results); results.appendChild(unlockEl); } else { $('#stage').after(results); msgEl.after(unlockEl); } }
   $$('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode)); helpEl.textContent=t('help_'+mode);
   const show=(sel,v)=>{ $(sel).hidden=!v; }; const timed = mode==='echo'||mode==='sight'||mode==='ear'; const songs = mode==='songs';
-  show('#gPool', !songs); show('#gSongs', songs); show('#gRhythm', timed); show('#gTempo', timed||songs); show('#gMetro', !(timed||songs)); show('#gFlash', mode==='flash'); show('#gEar', mode==='ear'); show('#gLong', mode==='long'); show('#lPlayAlong', mode==='sight'||songs); show('#lHide', mode==='echo');
+  show('#gPool', !songs); show('#gSongs', songs); show('#gRhythm', timed); show('#gTempo', timed||songs); show('#gMetro', !(timed||songs)); show('#gFlash', mode==='flash'); show('#gEar', mode==='ear');
+  heroLast=null; updateView(); show('#gLong', mode==='long'); show('#lPlayAlong', mode==='sight'||songs); show('#lHide', mode==='echo');
   btnNew.hidden=!timed; btnListen.hidden=!(timed || songs || mode==='flash'); btnPlay.hidden = mode==='explore' && A.micOn; btnStop.hidden = mode==='explore';
   trail.hidden = !(mode==='explore'||mode==='long'); $('#poolHint').textContent = mode==='long' ? t('choose_note') : ''; $('#longNav').hidden = mode!=='long';
   updateButtonLabels(); renderPool(); hideResults(); renderRecent(); unlockEl.hidden=true; setMsg(''); targetEl.textContent='–'; renderFingering(null);
@@ -1348,7 +1441,7 @@ function onSetting(k){
     case 'showNames': case 'maxBars': relayout(); break;
     case 'transpose': applyTexts(); relayout(); if(mode==='flash' && flash.target && (flash.solved||flash.hinted)) revealName(); else if(mode==='long' && long.target) targetEl.textContent=nm(long.target); break;
     case 'showFingering': renderFingering(mode==='flash'? flash.target : mode==='long'? long.target : (curIdx>=0 && L && !L.events[curIdx].rest ? L.events[curIdx].note : null)); break;
-    case 'bpb': case 'bars': case 'maxInt': if(mode==='echo'||mode==='sight'||mode==='ear') newPhrase(); break;
+    case 'bpb': case 'bars': case 'maxInt': case 'sync': if(mode==='echo'||mode==='sight'||mode==='ear') newPhrase(); break;
     case 'hideNotes': relayout(); break;
     case 'longDur': if(mode==='long') drawLongGraph(null); break;
     case 'bpm': applyTempo(); break;
@@ -1396,13 +1489,14 @@ document.addEventListener('keydown', e=>{
   else if(e.key==='m' && !$('#gMetro').hidden) $('#metroBtn').click();
   else if((e.key==='ArrowLeft'||e.key==='ArrowRight') && mode==='long'){ e.preventDefault(); longStep(e.key==='ArrowRight'?1:-1); }
 });
-let rsz=0; window.addEventListener('resize', ()=>{ clearTimeout(rsz); rsz=setTimeout(()=>{ relayout(); if(mode==='explore') drawTrail(A.ctx? A.ctx.currentTime : 0); if(mode==='long') drawLongGraph(null); }, 150); });
+let rsz=0; window.addEventListener('resize', ()=>{ clearTimeout(rsz); rsz=setTimeout(()=>{ relayout(); if(mode==='explore') drawTrail(A.ctx? A.ctx.currentTime : 0); if(mode==='long') drawLongGraph(null); if(!hero.hidden) drawHero(A.ctx? A.ctx.currentTime : 0); }, 150); });
+$$('#viewSel button').forEach(b=>b.onclick=()=>{ S.view=b.dataset.view; saveS(); updateView(); });
 if(document.fonts){ document.fonts.load('40px "Noto Music"').catch(()=>{}).then(()=>relayout()); document.fonts.ready.then(()=>relayout()); }
 
 // init
 applyTexts(); bindInputs(); setBeats(-1, S.bpb); applyMode();
 // test hook (only with ?debug in the URL): exposes internals for the headless UI harness
-if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, SONGS, parseSong, loadSong};
+if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, drawHero, heroLanes, updateView, heroScrollBy, get heroScroll(){ return heroScroll; }, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, SONGS, parseSong, loadSong};
 })();
 </script>
 </body>
