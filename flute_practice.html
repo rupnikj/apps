@@ -902,6 +902,9 @@ const SONGS = [
   {id:'zaspana', title:'8. Zaspana pesem', by:'H. Strmčnik, prir. M. Strmčnik', text:'6/4 c2q a1q g1h g1h | a1q c2q g1h g1h | a1q a1q c2h a1h | c2h a1q a1q c2h | c2w rh'},
   {id:'kuza', title:'9. Kuža pazi', by:'J. Bitenc, prir. M. Strmčnik', text:'4/4 1# g1q g1q g1q g1q | a1q a1q a1q a1q | h1q h1q a1q a1q | g1q g1q g1h | g1q g1q g1q g1q | a1q a1q a1q a1q | h1q h1q a1q a1q | g1q g1q g1h'},
   {id:'enten', title:'10. En ten tini', by:'S. Modrijan', text:'4/4 1# g1h a1h | h1h a1h | g1q g1q a1q a1q | h1h a1h | g1q g1q a1q a1q | h1q h1q a1q a1q | g1q a1q h1q a1q | g1w'},
+  {id:'zvonec', title:'11. Šolski zvonec', by:'E. Adamič, prir. M. Strmčnik', text:'4/4 1# g1q:Šol- g1q:ski g1q:zvo- g1q:nec | a1q:za- a1q:zvo- a1h:ni: | h1q:bim, h1q:bim, g1q:bim, g1q:bim, | a1w:bim. | g1q:Zdaj g1q:hi- g1q:ti- g1q:te | a1q:no- a1q:ge a1h:mi, | h1q:da g1q:ne a1q:za- a1q:mu- | g1w:dim.'},
+  {id:'polzek2', title:'12. Polžek', by:'E. Werdin, prir. M. Strmčnik', text:'4/4 1# g1q g1q g1q a1q | h1q a1q g1h | a1q g1q a1q h1q | g1h g1h | g1q g1q g1q a1q | h1q a1q g1h | a1q g1q a1q h1q | g1h g1h'},
+  {id:'sonce', title:'13. Sonce sije, dež, megla', by:'Slov. ljudska, prir. M. Strmčnik', text:'4/4 1# h1q h1q a1q a1q | h1q h1q g1h | h1q h1q a1q a1q | h1q h1q g1h | h1q h1q g1q a1q | h1h g1h | h1q h1q g1q a1q | h1h g1h | h1q h1q g1q a1q | h1q h1q g1h | h1q h1q a1q a1q | g1h rh'},
 ];
 const DUR={w:4, h:2, q:1, e:0.5};
 function parseSong(text){
@@ -1331,7 +1334,7 @@ function finishTimingTest(R, res){
 // Same data as the staff: the run's beat timeline places each note (bottom edge = its start, height = its length), the live scoring
 // colours it as it crosses the hit line, and the microphone trail shows what was actually played. In By ear the target blocks stay
 // hidden until the result, only the trail is shown. Nothing here is a game score: the only figure is the mean timing error in ms.
-let heroLast=null, heroScroll=0;
+let heroLast=null, heroScroll=0, heroFirstY=0;   // heroFirstY: bottom edge of the last block drawn (test hook)
 // review scrolling: wheel or drag moves the pass under the hit line (later beats come down)
 function heroPpb(){ const dpr=devicePixelRatio||1; return (hero.height-64*dpr-10*dpr)/((currentPhrase ? currentPhrase.bpb : 4)*1.5); }
 function heroScrollBy(px){ if(run || !lastResult || !currentPhrase) return; const lenB=currentPhrase.bars*currentPhrase.bpb; heroScroll=clamp(heroScroll+px*(devicePixelRatio||1)/heroPpb(), 0, lenB); drawHero(A.ctx ? A.ctx.currentTime : 0); }
@@ -1362,38 +1365,47 @@ function drawHero(now){
   c.font=`${12*dpr}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
   lanes.forEach((ln,i)=>{ if(i){ c.strokeStyle=cssVar('--line'); c.lineWidth=dpr; c.beginPath(); c.moveTo(i*laneW,0); c.lineTo(i*laneW,H-labelH); c.stroke(); } c.fillStyle=cssVar('--muted'); c.fillText(nm(ln), i*laneW+laneW/2, H-labelH/2); });
   c.strokeStyle=cssVar('--accent'); c.lineWidth=2*dpr; c.globalAlpha=0.85; c.beginPath(); c.moveTo(0,hitY); c.lineTo(W,hitY); c.stroke(); c.globalAlpha=1;
-  const R=run, live = R && R.pb0!=null && R.phrase===currentPhrase, hidden = notesHidden() && !lastResult;
+  const R=run, onRun = !!(R && R.phrase===currentPhrase), hidden = notesHidden() && !lastResult;
   const evs=currentPhrase.events, lenB=currentPhrase.bars*currentPhrase.bpb;
-  let pb, ppb, heard=[], items=null, absSum=0, absN=0;
-  if(live){
-    const b=R.beatAt(now); const inListen=R.lb0!=null && b<R.lb0+R.lreps*R.lenB && (b>=R.lb0||R.lb0===0);
-    pb = inListen ? (b-R.lb0)%R.lenB : b-R.pb0; ppb=(hitY-top)/(R.bpb*1.5); heard=R.heard; items=R.liveItems||[];
-  } else {
-    // same scale as live play: before a run the first stretch of the phrase waits above the hit line; after a result the pass is
-    // reviewed by scrolling (wheel / drag), heroScroll being the beat at the hit line
-    ppb=(hitY-top)/(currentPhrase.bpb*1.5); pb = lastResult ? clamp(heroScroll, 0, lenB) : 0;
-    heard=(heroLast && heroLast.phrase===currentPhrase) ? heroLast.heard : []; items=lastResult ? lastResult.items : null;
-  }
-  const yOf=beat=>hitY-(beat-pb)*ppb; const itemOf=i=>items ? items.find(it=>it.i===i) : null;
+  const ppb=(hitY-top)/(currentPhrase.bpb*1.5);   // 1.5 bars visible above the hit line, in every state
   const bw=Math.min(laneW-8*dpr, 110*dpr), bx=li=>li*laneW+(laneW-bw)/2;   // blocks have a maximum width and sit centred in the lane
-  let drawn=0; c.save(); c.beginPath(); c.rect(0,0,W,H-labelH); c.clip();
-  if(!hidden) evs.forEach((e,i)=>{
-    if(e.rest) return; const li=laneIdx.get(e.note.midi); if(li==null) return;
-    const yb=yOf(e.startBeat), yt=yOf(e.startBeat+e.d); if(yb<top-2*dpr || yt>H-labelH) return;
-    const it=itemOf(i); const cur = live && pb>=e.startBeat && pb<e.startBeat+e.d;
-    c.fillStyle = it ? statusColor(it.status==='ok' && it.timing==='slur' ? 'slur' : it.status) : cur ? cssVar('--accent') : cssVar('--chip-on');
-    c.globalAlpha = it ? 0.9 : cur ? 0.95 : 0.55;
-    const x=bx(li), w=bw, h=Math.max(yb-yt-2*dpr, 4*dpr); c.beginPath(); c.roundRect(x, yt+dpr, w, h, 5*dpr); c.fill(); c.globalAlpha=1; drawn++;
-    if(h>=16*dpr){ c.fillStyle=cssVar('--card'); c.fillText(nm(e.note), x+w/2, yb-h/2); }
-    if(it && it.offset!=null && Math.abs(it.offset)>0.03){ const y=yb+it.offset/(R? R.spb : 60/S.bpm)*ppb; c.strokeStyle=it.offset>0?cssVar('--warn'):cssVar('--accent'); c.lineWidth=2*dpr; c.beginPath(); c.moveTo(x,y); c.lineTo(x+w,y); c.stroke(); c.fillStyle=cssVar('--ink'); c.textAlign='left'; c.fillText((it.offset>0?'+':'')+Math.round(it.offset*1000), x+w+3*dpr, y); c.textAlign='center'; }
+  let drawn=0, absSum=0, absN=0, pb=0; heroFirstY=null; c.save(); c.beginPath(); c.rect(0,0,W,H-labelH); c.clip();
+  // one block: yb/yt = bottom/top edge, it = scoring item, kind = 'play' (yours, coloured by the scoring) | 'listen' (the computer's
+  // copy, outlined) | 'next' (the pre-scheduled next pass, faint), pps = pixels per second for the early/late tick
+  const block=(e, li, yb, yt, it, kind, cur, pps)=>{
+    if(yb<top-2*dpr || yt>H-labelH) return;
+    const x=bx(li), w=bw, h=Math.max(yb-yt-2*dpr, 4*dpr);
+    if(kind==='listen'){ c.strokeStyle=cssVar('--accent'); c.lineWidth=1.5*dpr; c.globalAlpha=0.7; c.beginPath(); c.roundRect(x+dpr, yt+dpr, w-2*dpr, h, 5*dpr); c.stroke(); }
+    else { c.fillStyle = it ? statusColor(it.status==='ok' && it.timing==='slur' ? 'slur' : it.status) : cur ? cssVar('--accent') : cssVar('--chip-on');
+      c.globalAlpha = it ? 0.9 : cur ? 0.95 : kind==='next' ? 0.3 : 0.55; c.beginPath(); c.roundRect(x, yt+dpr, w, h, 5*dpr); c.fill(); }
+    c.globalAlpha=1; drawn++; if(heroFirstY==null) heroFirstY=yb;
+    if(h>=16*dpr){ c.fillStyle = kind==='listen' ? cssVar('--muted') : cssVar('--card'); c.fillText(nm(e.note), x+w/2, yb-h/2); }
+    if(it && it.offset!=null && Math.abs(it.offset)>0.03){ const y=yb+it.offset*pps; c.strokeStyle=it.offset>0?cssVar('--warn'):cssVar('--accent'); c.lineWidth=2*dpr; c.beginPath(); c.moveTo(x,y); c.lineTo(x+w,y); c.stroke(); c.fillStyle=cssVar('--ink'); c.textAlign='left'; c.fillText((it.offset>0?'+':'')+Math.round(it.offset*1000), x+w+3*dpr, y); c.textAlign='center'; }
     if(it && it.offset!=null && it.status==='ok'){ absSum+=Math.abs(it.offset); absN++; }
-  });
-  // microphone trail: what was actually played, by lane; green when it matches the target sounding at that moment
-  for(const h of heard){ const r=Math.round(h.w); const li=laneIdx.get(r); if(li==null) continue; const y=yOf(h.b); if(y<top||y>hitY+52*dpr) continue;
+  };
+  const trail=(heard, yOfBeat)=>{ for(const h of heard){ const r=Math.round(h.w); const li=laneIdx.get(r); if(li==null) continue; const y=yOfBeat(h.b); if(y<top||y>hitY+52*dpr) continue;
     const tgt=evs.find(e=>!e.rest && h.b>=e.startBeat && h.b<e.startBeat+e.d); const okm = tgt && tgt.note.midi===r;
-    c.fillStyle = hidden ? cssVar('--accent') : okm ? cssVar('--ok') : cssVar('--bad'); c.globalAlpha=0.75; const tw=Math.min(bw*0.5, 40*dpr); c.fillRect(bx(li)+(bw-tw)/2, y-1.5*dpr, tw, 3*dpr); c.globalAlpha=1; }
+    c.fillStyle = hidden ? cssVar('--accent') : okm ? cssVar('--ok') : cssVar('--bad'); c.globalAlpha=0.75; const tw=Math.min(bw*0.5, 40*dpr); c.fillRect(bx(li)+(bw-tw)/2, y-1.5*dpr, tw, 3*dpr); c.globalAlpha=1; } };
+  if(onRun){
+    // during a run the strip is a time axis, so everything flows through the hit line in order: the computer's copies while you
+    // listen, the count-in gap, your copy, and (with Loop) the next pass approaching from above. Tempo changes stretch it live.
+    const pps=ppb/R.spb, yT=t=>hitY-(t-now)*pps;
+    const copies=[]; const addRun=(Q,next)=>{ if(Q.lb0!=null) for(let k=0;k<Q.lreps;k++) copies.push({Q, b0:Q.lb0+k*Q.lenB, kind:'listen'}); if(Q.pb0!=null) copies.push({Q, b0:Q.pb0, kind: next?'next':'play'}); };
+    addRun(R,false); if(R.next && R.next.phrase===currentPhrase) addRun(R.next,true);
+    if(!hidden) for(const cp of copies) cp.Q.phrase.events.forEach((e,i)=>{ if(e.rest) return; const li=laneIdx.get(e.note.midi); if(li==null) return;
+      const t0=cp.Q.tob(cp.b0+e.startBeat), t1=cp.Q.tob(cp.b0+e.startBeat+e.d); const it = cp.kind==='play' ? (R.liveItems||[]).find(x=>x.i===i) : null;
+      block(e, li, yT(t0), yT(t1), it, cp.kind, cp.kind==='play' && now>=t0 && now<t1, pps); });
+    if(R.pb0!=null) trail(R.heard, b=>yT(R.tob(R.pb0+b)));
+  } else {
+    // before a run the first stretch of the phrase waits above the hit line; after a result the pass is reviewed by scrolling
+    // (wheel / drag), heroScroll being the beat at the hit line
+    pb = lastResult ? clamp(heroScroll, 0, lenB) : 0; const yOf=beat=>hitY-(beat-pb)*ppb, pps=ppb/(60/S.bpm);
+    const items=lastResult ? lastResult.items : null;
+    if(!hidden) evs.forEach((e,i)=>{ if(e.rest) return; const li=laneIdx.get(e.note.midi); if(li==null) return; block(e, li, yOf(e.startBeat), yOf(e.startBeat+e.d), items ? items.find(it=>it.i===i) : null, 'play', false, pps); });
+    trail((heroLast && heroLast.phrase===currentPhrase) ? heroLast.heard : [], yOf);
+  }
   c.restore();
-  if(!live && lastResult && lenB>0){   // review: position marker on the right edge
+  if(!run && lastResult && lenB>0){   // review: position marker on the right edge
     const vis=(hitY-top)/ppb, trackH=hitY-top; c.fillStyle=cssVar('--line'); c.fillRect(W-5*dpr, top, 3*dpr, trackH);
     c.fillStyle=cssVar('--accent'); const th=Math.max(8*dpr, trackH*Math.min(1, vis/(lenB+vis))); c.fillRect(W-5*dpr, top+trackH-th-(trackH-th)*(pb/lenB), 3*dpr, th);
     c.fillStyle=cssVar('--muted'); c.textAlign='left'; c.fillText(t('hero_scroll'), 8*dpr, 14*dpr); c.textAlign='center';
@@ -1496,7 +1508,7 @@ if(document.fonts){ document.fonts.load('40px "Noto Music"').catch(()=>{}).then(
 // init
 applyTexts(); bindInputs(); setBeats(-1, S.bpb); applyMode();
 // test hook (only with ?debug in the URL): exposes internals for the headless UI harness
-if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, drawHero, heroLanes, updateView, heroScrollBy, get heroScroll(){ return heroScroll; }, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, SONGS, parseSong, loadSong};
+if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, drawHero, heroLanes, updateView, heroScrollBy, get heroScroll(){ return heroScroll; }, get heroFirstY(){ return heroFirstY; }, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, SONGS, parseSong, loadSong};
 })();
 </script>
 </body>
