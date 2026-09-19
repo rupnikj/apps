@@ -237,10 +237,11 @@ footer b{color:var(--ink)}
       </div>
     </div>
     <div class="group" id="gMetro">
-      <h2 data-i18n="tempo">Tempo</h2>
+      <h2 data-i18n="metro">Metronome</h2>
       <div class="row">
         <button id="metroBtn" class="btn small">▶ Metronome</button>
-        <input type="range" min="40" max="240" step="2" data-set="bpm"><output class="bpmOut"></output>
+        <label class="inline"><span data-i18n="timesig">Time</span><select data-set="metroBeats"><option value="auto" data-i18n="metro_auto">auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>12</option></select><span>/</span><select data-set="metroUnit"><option>2</option><option>4</option><option>8</option></select></label>
+        <label class="inline" id="lMetroBpm"><input type="range" min="40" max="240" step="2" data-set="bpm"><output class="bpmOut"></output></label>
       </div>
     </div>
     <div class="group" id="gEar">
@@ -536,7 +537,7 @@ en: {
   help_long:'Hold the note steady and even. The line shows whether you are sharp (too much air) or flat.',
   notes:'Notes', rhythm:'Rhythm', tempo:'Tempo', timesig:'Time', bars:'Bars', maxint:'Leaps', sync:'Syncopation (long notes on any beat)',
   int_step:'steps only', int_third:'up to a third', int_fifth:'up to a fifth', int_any:'any',
-  countin:'Count-in', metro:'Metronome', ladder:'Tempo ladder', playalong:'Play along quietly (headphones!)', hide:'Hide the notes', autonext:'Auto-continue', loop:'Loop (repeat after a count-in)',
+  countin:'Count-in', metro:'Metronome', metro_auto:'auto', ladder:'Tempo ladder', playalong:'Play along quietly (headphones!)', hide:'Hide the notes', autonext:'Auto-continue', loop:'Loop (repeat after a count-in)',
   hint_after:'Show the note name after', never:'never', duration:'Duration',
   btn_new:'New', btn_listen:'Listen', btn_hear:'Hear it', btn_play:'Play', btn_stop:'Stop', btn_start:'Start', btn_next:'Next card',
   target:'Target', heard:'Heard', level:'Level', beat:'Beat', view_staff:'Staff', view_both:'Staff + Hero', view_hero:'Hero', precision:(ms)=>`precision ±${ms} ms`, hero_scroll:'scroll / drag to review',
@@ -579,7 +580,7 @@ sl: {
   help_long:'Drži ton mirno in enakomerno. Črta kaže, ali igraš previsoko (preveč zraka) ali prenizko.',
   notes:'Toni', rhythm:'Ritem', tempo:'Tempo', timesig:'Takt', bars:'Takti', maxint:'Skoki', sync:'Sinkopa (dolge note na katerikoli dobi)',
   int_step:'samo koraki', int_third:'do terce', int_fifth:'do kvinte', int_any:'poljubno',
-  countin:'Odštevanje', metro:'Metronom', ladder:'Tempo lestev', playalong:'Tiho predvajaj zraven (slušalke!)', hide:'Skrij note', autonext:'Samodejno naprej', loop:'Zanka (ponovi po odštevanju)',
+  countin:'Odštevanje', metro:'Metronom', metro_auto:'samodejno', ladder:'Tempo lestev', playalong:'Tiho predvajaj zraven (slušalke!)', hide:'Skrij note', autonext:'Samodejno naprej', loop:'Zanka (ponovi po odštevanju)',
   hint_after:'Pokaži ime note po', never:'nikoli', duration:'Trajanje',
   btn_new:'Novo', btn_listen:'Poslušaj', btn_hear:'Zaigraj mi', btn_play:'Igraj', btn_stop:'Stop', btn_start:'Začni', btn_next:'Naslednja kartica',
   target:'Cilj', heard:'Zaigrano', level:'Glasnost', beat:'Doba', view_staff:'Note', view_both:'Note + Hero', view_hero:'Hero', precision:(ms)=>`natančnost ±${ms} ms`, hero_scroll:'pomikaj za pregled',
@@ -614,7 +615,7 @@ sl: {
 // ===== settings & stats =====
 const LS_SET='bfp-settings-v3', LS_STATS='bfp-stats-v1';
 const DEFAULTS = { lang:'en', mode:'flash', transpose:12, ignoreOctave:false, tol:50, gateDb:-45, latency:40, showFingering:false, showNames:false, maxBars:4,
-  song:'prva', songText:'', pool:['A4','C5'], cells:['q','h'], bpb:4, bars:2, maxInt:4, sync:false, view:'staff', laneW:80, bpm:72, earReps:1, countIn:true, metro:true, ladder:false, playAlong:false, hideNotes:false, autoNext:true, loop:false, hintDelay:4, longDur:6, longNote:'G4' };
+  song:'prva', songText:'', pool:['A4','C5'], cells:['q','h'], bpb:4, bars:2, maxInt:4, sync:false, view:'staff', laneW:80, bpm:72, metroBeats:'auto', metroUnit:4, earReps:1, countIn:true, metro:true, ladder:false, playAlong:false, hideNotes:false, autoNext:true, loop:false, hintDelay:4, longDur:6, longNote:'G4' };
 function loadJSON(k, d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v && typeof v==='object' ? v : d; }catch(e){ return d; } }
 function saveJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 const S = Object.assign({}, DEFAULTS, loadJSON(LS_SET, {}));
@@ -680,12 +681,18 @@ function click(at, accent, keep){
   const g=ctx.createGain(); g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(accent?0.8:0.5, at+0.002); g.gain.exponentialRampToValueAtTime(0.0001, at+0.045);
   o.connect(g); g.connect(A.metro); o.start(at); o.stop(at+0.06); o._at=at; if(!keep) A.sched.push(o); A.clicks.push(at);
 }
-// free-running metronome for the modes without a timed run (explore, flashcards, long tones); M key toggles it
+// free-running metronome for every mode (M key toggles it), with its own time signature x/y: x clicks per bar, the first accented,
+// one click per y-note. The tempo slider stays the quarter-note tempo, so 6/8 clicks eighths, twice as fast as 6/4 at the same bpm.
 const metroFree={on:false, next:0, beat:0, timer:0, sched:[]};
+// "auto" follows whatever is on the staff: the song's metre in Songs, the exercise's Time elsewhere
+const metroBeats = () => S.metroBeats==='auto' ? ((currentPhrase && currentPhrase.bpb) || S.bpb || 4) : Math.max(1, +S.metroBeats||4);
+const metroStep = () => (60/S.bpm)*(4/(+S.metroUnit||4));
 function metroFreeStart(){ const ctx=ensureCtx(); ctx.resume(); if(run){ btnStop.click(); } metroFree.on=true; metroFree.next=ctx.currentTime+0.15; metroFree.beat=0; metroFree.sched=[]; metroFreeTick(); metroFree.timer=setInterval(metroFreeTick, 60); updateMetroBtn(); }
-function metroFreeStop(){ if(!metroFree.on) return; metroFree.on=false; clearInterval(metroFree.timer); metroFree.timer=0; setBeats(-1, S.bpb); updateMetroBtn(); }
-function metroFreeTick(){ const ctx=A.ctx; while(metroFree.next < ctx.currentTime+0.25){ const b=metroFree.beat%S.bpb; click(metroFree.next, b===0, true); metroFree.sched.push({t:metroFree.next, b}); metroFree.beat++; metroFree.next+=60/S.bpm; } if(metroFree.sched.length>64) metroFree.sched.splice(0,32); }
-function metroFreeVisual(now){ let cur=-1; for(const c of metroFree.sched){ if(c.t<=now) cur=c.b; else break; } setBeats(cur, S.bpb); }
+function metroFreeStop(){ if(!metroFree.on) return; metroFree.on=false; clearInterval(metroFree.timer); metroFree.timer=0; setBeats(-1, metroBeats()); updateMetroBtn(); }
+function metroFreeTick(){ const ctx=A.ctx; while(metroFree.next < ctx.currentTime+0.25){ const b=metroFree.beat%metroBeats(); click(metroFree.next, b===0, true); metroFree.sched.push({t:metroFree.next, b}); metroFree.beat++; metroFree.next+=metroStep(); } if(metroFree.sched.length>64) metroFree.sched.splice(0,32); }
+// nothing running redraws the dots, so refresh them whenever the metre can change (song, Time, metronome setting, mode)
+function refreshBeats(){ if(!run && !metroFree.on) setBeats(-1, metroBeats()); }
+function metroFreeVisual(now){ let cur=-1; for(const c of metroFree.sched){ if(c.t<=now) cur=c.b; else break; } setBeats(cur, metroBeats()); }
 // the same toggle sits in the Tempo row (Explore / Flashcards / Long tones) and in the action row of the timed modes
 function updateMetroBtn(){ for(const b of [$('#metroBtn'), $('#metroBtn2')]){ b.textContent=(metroFree.on?'■ ':'▶ ')+t('metro'); b.classList.toggle('live', metroFree.on); } }
 function stopAudio(){ for(const n of A.sched){ try{ n.stop(); }catch(e){} } A.sched=[]; }
@@ -909,6 +916,9 @@ const SONGS = [
   {id:'polzek2', title:'12. Polžek', by:'E. Werdin, prir. M. Strmčnik', text:'4/4 1# g1q g1q g1q a1q | h1q a1q g1h | a1q g1q a1q h1q | g1h g1h | g1q g1q g1q a1q | h1q a1q g1h | a1q g1q a1q h1q | g1h g1h'},
   {id:'sonce', title:'13. Sonce sije, dež, megla', by:'Slov. ljudska, prir. M. Strmčnik', text:'4/4 1# h1q h1q a1q a1q | h1q h1q g1h | h1q h1q a1q a1q | h1q h1q g1h | h1q h1q g1q a1q | h1h g1h | h1q h1q g1q a1q | h1h g1h | h1q h1q g1q a1q | h1q h1q g1h | h1q h1q a1q a1q | g1h rh'},
   {id:'abraham', title:'14. Abraham \'ma sedem sinov', by:'Slov. ljudska, prir. M. Strmčnik', text:'4/4 1# g1q g1q g1q a1q | h1q h1q h1q g1q | a1q a1q h1q a1q | g1q g1q g1h | g1q g1q g1q a1q | h1q h1q h1q g1q | a1q a1q h1q a1q | g1q g1q g1h | c2q c2q c2h | h1q h1q h1h | a1q a1q h1q a1q | g1q a1q h1h | c2q c2q c2h | h1q h1q h1h | a1q a1q h1q a1q | g1q g1q g1h'},
+  {id:'eci', title:'Eci peci pec', by:'Izštevanka, H. Strmčnik', text:'2/4 c2q a1q | g1q g1q | c2q rq | c2q a1q | g1q a1q | g1q rq | g1q a1q | g1q a1q | g1q a1q | g1q c2q | a1q a1q | g1q g1q | c2q rq'},
+  {id:'zavijalka', title:'Zavijalka', by:'H. Strmčnik', text:'2/4 1b c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q rq | c2q c2q | a1q rq'},
+  {id:'previdna', title:'Previdna pesem', by:'Slov. ljudska', text:'3/4 c2q rq a1q | c2q rq g1q | g1q rq a1q | g1h a1q | c2q a1q g1q | a1q rq a1q | g1q rh | g1h.'},
 ];
 const DUR={w:4, h:2, q:1, e:0.5};
 function parseSong(text){
@@ -946,7 +956,7 @@ function renderSongSel(){ const sel=$('#songSel'); sel.innerHTML=''; SONGS.forEa
 function loadSong(fromText){
   stopRun(); const txt = fromText!=null ? fromText : songText(); if(fromText==null) $('#songText').value=txt;
   const p=parseSong(txt); $('#songErr').textContent=p.errors.join(' · '); const x=songById(S.song); $('#songMeta').textContent = x ? (x.by||'') : '';
-  currentPhrase={events:p.events, bpb:p.bpb, key:p.key, bars:Math.max(p.bars,1)}; lastResult=null; relayout(); hideResults(); setPhase('phase_idle'); targetEl.textContent='–'; renderFingering(null);
+  currentPhrase={events:p.events, bpb:p.bpb, key:p.key, bars:Math.max(p.bars,1)}; if(metroFree.on) metroFree.beat=0; refreshBeats(); lastResult=null; relayout(); hideResults(); setPhase('phase_idle'); targetEl.textContent='–'; renderFingering(null);
 }
 
 // ===== state =====
@@ -978,7 +988,7 @@ function layoutFor(phrase){ return layoutPhrase(phrase, {sp:SPX(), width:staffWr
 function newPhrase(){
   if(mode==='songs'){ loadSong(); return; }
   cancelAuto(); stopRun();
-  currentPhrase=genPhrase();
+  currentPhrase=genPhrase(); refreshBeats();   // after the new phrase, so an "auto" metronome sees its metre
   lastResult=null; relayout(); hideResults(); setPhase('phase_idle'); targetEl.textContent='–'; renderFingering(null);
 }
 function setStaffEmpty(){ currentPhrase={events:[], bpb:4, bars:1}; lastResult=null; relayout(); }
@@ -986,7 +996,7 @@ let autoIv=0;
 function cancelAuto(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=0; } if(autoIv){ clearInterval(autoIv); autoIv=0; } }
 // auto-continue with a visible countdown; the caller gives more time when there is something to read in the results
 function scheduleAuto(sec, fn){ cancelAuto(); let left=sec; setMsg(t('next_in', left)); autoIv=setInterval(()=>{ left--; if(left>0) setMsg(t('next_in', left)); }, 1000); autoTimer=setTimeout(()=>{ cancelAuto(); setMsg(''); fn(); }, sec*1000); }
-function stopRun(){ run=null; stopAudio(); setPlayhead(null); setGhost(null); setBeats(-1, S.bpb); long.on=false; cancelAuto(); for(const k of ['hintTimer','hintTimer2']) if(flash[k]){ clearTimeout(flash[k]); flash[k]=0; } }
+function stopRun(){ run=null; stopAudio(); setPlayhead(null); setGhost(null); setBeats(-1, metroBeats()); long.on=false; cancelAuto(); for(const k of ['hintTimer','hintTimer2']) if(flash[k]){ clearTimeout(flash[k]); flash[k]=0; } }
 
 // ===== echo / sight-reading runs =====
 function runOpts(){ return (mode==='echo'||mode==='ear') ? {countIn:S.countIn, listen:true, play:true, listenReps: mode==='ear' ? (+S.earReps||1) : 1, countAfterListen: mode==='ear'} : {countIn:S.countIn, listen:false, play:true}; }
@@ -1429,8 +1439,10 @@ function applyMode(){
   { const results=$('#results'); $('#stage').classList.toggle('ear', mode==='ear'); if(mode==='ear'){ $('#stageGrid').appendChild(results); results.appendChild(unlockEl); } else { $('#stage').after(results); msgEl.after(unlockEl); } }
   $$('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode)); helpEl.textContent=t('help_'+mode);
   const show=(sel,v)=>{ $(sel).hidden=!v; }; const timed = mode==='echo'||mode==='sight'||mode==='ear'; const songs = mode==='songs';
-  show('#gPool', !songs); show('#gSongs', songs); show('#gRhythm', timed); show('#gTempo', timed||songs); show('#gMetro', !(timed||songs)); show('#gFlash', mode==='flash'); show('#gEar', mode==='ear');
-  heroLast=null; updateView(); show('#gLong', mode==='long'); show('#lPlayAlong', mode==='sight'||songs); show('#lHide', mode==='echo');
+  show('#gPool', !songs); show('#gSongs', songs); show('#gRhythm', timed); show('#gTempo', timed||songs); show('#gMetro', true); show('#gFlash', mode==='flash'); show('#gEar', mode==='ear');
+  // the metronome's own time signature is always available; its button and tempo slider only where the action row has none
+  $('#metroBtn').hidden = $('#lMetroBpm').hidden = timed||songs;
+  heroLast=null; updateView(); refreshBeats(); show('#gLong', mode==='long'); show('#lPlayAlong', mode==='sight'||songs); show('#lHide', mode==='echo');
   btnNew.hidden=!timed; btnListen.hidden=!(timed || songs || mode==='flash'); btnPlay.hidden = mode==='explore' && A.micOn; btnStop.hidden = mode==='explore'; $('#metroBtn2').hidden=!(timed||songs);
   trail.hidden = !(mode==='explore'||mode==='long'); $('#poolHint').textContent = mode==='long' ? t('choose_note') : ''; $('#longNav').hidden = mode!=='long';
   updateButtonLabels(); renderPool(); hideResults(); renderRecent(); unlockEl.hidden=true; setMsg(''); targetEl.textContent='–'; renderFingering(null);
@@ -1457,9 +1469,12 @@ function onSetting(k){
   switch(k){
     case 'showNames': case 'maxBars': relayout(); break;
     case 'laneW': if(!hero.hidden) drawHero(A.ctx ? A.ctx.currentTime : 0); break;
+    case 'metroBeats': case 'metroUnit': if(metroFree.on) metroFree.beat=0; refreshBeats(); break;   // start a fresh bar on the next click
     case 'transpose': applyTexts(); relayout(); if(mode==='flash' && flash.target && (flash.solved||flash.hinted)) revealName(); else if(mode==='long' && long.target) targetEl.textContent=nm(long.target); break;
     case 'showFingering': renderFingering(mode==='flash'? flash.target : mode==='long'? long.target : (curIdx>=0 && L && !L.events[curIdx].rest ? L.events[curIdx].note : null)); break;
-    case 'bpb': case 'bars': case 'maxInt': case 'sync': if(mode==='echo'||mode==='sight'||mode==='ear') newPhrase(); break;
+    case 'bpb': case 'bars': case 'maxInt': case 'sync':
+      if(k==='bpb'){ if(metroFree.on) metroFree.beat=0; refreshBeats(); }   // an "auto" metronome follows the exercise metre
+      if(mode==='echo'||mode==='sight'||mode==='ear') newPhrase(); break;
     case 'hideNotes': relayout(); break;
     case 'longDur': if(mode==='long') drawLongGraph(null); break;
     case 'bpm': applyTempo(); break;
@@ -1512,9 +1527,9 @@ $$('#viewSel button').forEach(b=>b.onclick=()=>{ S.view=b.dataset.view; saveS();
 if(document.fonts){ document.fonts.load('40px "Noto Music"').catch(()=>{}).then(()=>relayout()); document.fonts.ready.then(()=>relayout()); }
 
 // init
-applyTexts(); bindInputs(); setBeats(-1, S.bpb); applyMode();
+applyTexts(); bindInputs(); applyMode(); refreshBeats();
 // test hook (only with ?debug in the URL): exposes internals for the headless UI harness
-if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, drawHero, heroLanes, updateView, heroScrollBy, get heroScroll(){ return heroScroll; }, get heroFirstY(){ return heroFirstY; }, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, SONGS, parseSong, loadSong};
+if(new URLSearchParams(location.search).has('debug')) window.__app={CORE, S, stats, A, flash, long, onset, timingTest, drawHero, heroLanes, updateView, heroScrollBy, get heroScroll(){ return heroScroll; }, get heroFirstY(){ return heroFirstY; }, get run(){ return run; }, get L(){ return L; }, applyResultColors, showResults, get mode(){ return mode; }, flashNext, flashTick, longStart, longTick, recordNote, renderStats, checkUnlock, setLang, applyMode, renderFingering, FING, nm, t, saveStats, longStep, showLongTarget, startRun, runTick, runOpts, metroFree, metroFreeTick, metroFreeVisual, metroBeats, SONGS, parseSong, loadSong};
 })();
 </script>
 </body>
