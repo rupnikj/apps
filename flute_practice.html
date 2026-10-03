@@ -394,7 +394,7 @@ const CORE = (() => {
   }
 
   // ---- layout (staff-space units → px) ----
-  const SLOT = {4:8, 3:6.8, 2:5.4, 1.5:4.6, 1:3.6, 0.5:2.4};
+  const SLOT = {4:8, 3:6.8, 2:5.4, 1.5:4.6, 1:3.6, 0.75:2.9, 0.5:2.4, 0.25:1.8};
   // key signature accidentals: sharps on F C, flats on B E (steps relative to the staff)
   const KEY_STEPS = {sharp:[10,7], flat:[6,9]};
   // o: {sp, width, maxBars, center, noTimeSig, full (stretch every system to the full width)}; phrase.key = +n sharps / -n flats (0..2)
@@ -527,7 +527,7 @@ const T_ALL = {
 en: {
   title:'Recorder practice', m_explore:'Explore', m_flash:'Flashcards', m_echo:'Echo', m_ear:'By ear', m_sight:'Sight-read', m_songs:'Songs', m_long:'Long tones',
   help_songs:'Pick a song: count-in, then play it in tempo. The text below is the song – edit it to fix a note or write your own.',
-  songs:'Song', custom_song:'Custom', song_help:'Notation: note + length, e.g. c2h a1q h1e g1w (h = half, q = quarter, e = eighth, w = whole, add . for dotted), rests rq rh, lyrics after a colon (c2h:Le-), bars with |, time signature first (3/4, 6/4), key signature as 1# or 1b. Lowercase names are the Slovenian written ones (c1 = lowest note), uppercase are English sounding names as shown on screen (C5 = lowest note).', song_bad:(x)=>`cannot read "${x}"`, song_cross:(x)=>`"${x}" crosses a bar line`, song_dur:(x)=>`unsupported length in "${x}"`, song_range:(x)=>`"${x}" is outside the recorder range`, song_empty:'The song has no notes.',
+  songs:'Song', custom_song:'Custom', song_help:'Notation: note + length, e.g. c2h a1q h1e g1w (w = whole, h = half, q = quarter, e = eighth, s = sixteenth, add . for dotted), rests rq rh, lyrics after a colon (c2h:Le-), bars with |, time signature first (3/4, 6/4), key signature as 1# or 1b. Lowercase names are the Slovenian written ones (c1 = lowest note), uppercase are English sounding names as shown on screen (C5 = lowest note).', song_bad:(x)=>`cannot read "${x}"`, song_cross:(x)=>`"${x}" crosses a bar line`, song_dur:(x)=>`unsupported length in "${x}"`, song_range:(x)=>`"${x}" is outside the recorder range`, song_empty:'The song has no notes.',
   mic_on:'mic on', mic_off:'mic off – asked for when you press Start', mic_err:'No microphone access. Allow it in the browser and press Start again.', helpbox:'Help & keys',
   help_explore:'Play anything – the note you play appears on the staff. Good for testing fingerings.',
   help_flash:'One note is shown. Play it – no time pressure. When the pitch is right, the next card appears.',
@@ -570,7 +570,7 @@ en: {
 sl: {
   title:'Vaja za kljunasto flavto', m_explore:'Raziskuj', m_flash:'Kartice', m_echo:'Ponavljanje', m_ear:'Po posluhu', m_sight:'Z lista', m_songs:'Pesmi', m_long:'Dolgi toni',
   help_songs:'Izberi pesem: odštevanje, nato jo zaigraj v tempu. Besedilo spodaj je pesem – uredi ga, če je kak ton napačen, ali napiši svojo.',
-  songs:'Pesem', custom_song:'Lastna', song_help:'Zapis: ton + dolžina, npr. c2h a1q h1e g1w (h = polovinka, q = četrtinka, e = osminka, w = cela, pika . za podaljšanje), pavze rq rh, besedilo za dvopičjem (c2h:Le-), takti z |, taktovski način na začetku (3/4, 6/4), predznaki kot 1# ali 1b. Male črke so slovenska zapisana imena (c1 = najnižji ton), velike angleška zveneča imena, kot na zaslonu (C5 = najnižji ton).', song_bad:(x)=>`ne razumem „${x}“`, song_cross:(x)=>`„${x}“ sega čez taktnico`, song_dur:(x)=>`nepodprta dolžina v „${x}“`, song_range:(x)=>`„${x}“ je izven obsega flavte`, song_empty:'Pesem nima tonov.',
+  songs:'Pesem', custom_song:'Lastna', song_help:'Zapis: ton + dolžina, npr. c2h a1q h1e g1w (w = cela, h = polovinka, q = četrtinka, e = osminka, s = šestnajstinka, pika . za podaljšanje), pavze rq rh, besedilo za dvopičjem (c2h:Le-), takti z |, taktovski način na začetku (3/4, 6/4), predznaki kot 1# ali 1b. Male črke so slovenska zapisana imena (c1 = najnižji ton), velike angleška zveneča imena, kot na zaslonu (C5 = najnižji ton).', song_bad:(x)=>`ne razumem „${x}“`, song_cross:(x)=>`„${x}“ sega čez taktnico`, song_dur:(x)=>`nepodprta dolžina v „${x}“`, song_range:(x)=>`„${x}“ je izven obsega flavte`, song_empty:'Pesem nima tonov.',
   mic_on:'mikrofon vklopljen', mic_off:'mikrofon izklopljen – zahteva se ob pritisku na Začni', mic_err:'Ni dostopa do mikrofona. Dovoli ga v brskalniku in znova pritisni Začni.', helpbox:'Pomoč in tipke',
   help_explore:'Zaigraj karkoli – zaigrani ton se prikaže na notnem črtovju. Dobro za preizkušanje prijemov.',
   help_flash:'Prikaže se ena nota. Zaigraj jo – brez časovnega pritiska. Ko je ton pravilen, se prikaže naslednja kartica.',
@@ -795,7 +795,9 @@ function drawEvent(g, ev, sp){
   if(step>=12) for(let s=12;s<=step;s+=2) ledger(s);
   el('ellipse',{cx:x,cy:y,rx:(whole?0.75:0.62)*sp,ry:0.43*sp,transform:`rotate(-22 ${x} ${y})`,class:'head'+(hollow?' hollow':'')},g);
   if(!whole){ const up=ev.stemUp; const sx= up? x+0.56*sp : x-0.56*sp; const sy2 = ev.beamY!=null ? ev.beamY : (up? y-3.5*sp : y+3.5*sp);
-    el('line',{x1:sx,y1:y,x2:sx,y2:sy2,class:'stem'},g); if(ev.flag) drawFlag(g,sx,sy2,up,sp); }
+    el('line',{x1:sx,y1:y,x2:sx,y2:sy2,class:'stem'},g);
+    const nf = ev.flags!=null ? ev.flags : (ev.flag?1:0);          // a sixteenth carries two flags, an eighth one
+    for(let f=0; f<nf; f++) drawFlag(g, sx, sy2 + (up? f*0.75*sp : -f*0.75*sp), up, sp); }
   if(ev.dot){ const dy = (step%2===0) ? y-sp/2 : y; el('circle',{cx:x+1.05*sp,cy:dy,r:0.17*sp,class:'dot'},g); }
   if(ev.accText){ el('text',{x:x-0.85*sp,y:y,class:'acc','text-anchor':'end','dominant-baseline':'central','font-size':2.0*sp},g).textContent=ev.accText; }
 }
@@ -919,8 +921,11 @@ const SONGS = [
   {id:'eci', title:'Eci peci pec', by:'Izštevanka, H. Strmčnik', text:'2/4 c2q a1q | g1q g1q | c2q rq | c2q a1q | g1q a1q | g1q rq | g1q a1q | g1q a1q | g1q a1q | g1q c2q | a1q a1q | g1q g1q | c2q rq'},
   {id:'zavijalka', title:'Zavijalka', by:'H. Strmčnik', text:'2/4 1b c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q a1q | c2q c2q | a1q rq | c2q c2q | a1q rq'},
   {id:'previdna', title:'Previdna pesem', by:'Slov. ljudska', text:'3/4 c2q rq a1q | c2q rq g1q | g1q rq a1q | g1h a1q | c2q a1q g1q | a1q rq a1q | g1q rh | g1h.'},
+  // Zdravljica: the official score (Premrl) is in B flat; transposed up a tone to C so it sits on a C recorder.
+  // The eighth note is the unit, as the user wrote it. Bars 1-6 follow their letters; the rest is reconstructed.
+  {id:'zdravljica', title:'Zdravljica (himna)', by:'S. Premrl / F. Prešeren', text:'4/4 g1q | c2e. c2s h1e h1e a1q h1e h1e | g1e. g1s a1e a1e e1q f1q | g1h. g1q | c2q. c2e d2q e2q | e2q d2q c2q h1q | h1e a1e gis1e a1e d2q h1e a1e | g1h. rq | g1q a1q f1h | e1q g1q c2q. c2e | h1q. h1e a1q a1q | g1q fis1q g1h | g1q a1q f1h | e1q g1q c2q. c2e | c2q c2q c2q c2q | c2h h1q a1q | g1e f2e e2e d2e g2q h1q | c2h.'},
 ];
-const DUR={w:4, h:2, q:1, e:0.5};
+const DUR={w:4, h:2, q:1, e:0.5, s:0.25};
 function parseSong(text){
   const errs=[]; const toks=(text||'').replace(/\|/g,' | ').trim().split(/\s+/).filter(Boolean);
   let bpb=4, i=0, key=0;
@@ -929,11 +934,11 @@ function parseSong(text){
   for(; i<toks.length; i++){
     const tk=toks[i];
     if(tk==='|'){ if(barPos>0){ bar++; barPos=0; } continue; }
-    const m=/^(?:(r)|([a-hA-H])(is|es|s|#|b)?([1-6]))([whqe])?(\.)?(?::(.*))?$/.exec(tk); if(!m){ errs.push(t('song_bad', tk)); continue; }
-    let d=DUR[m[5]||'q']; const dot=!!m[6]; if(dot) d*=1.5; if(!(d in {4:1,3:1,2:1,1.5:1,1:1,0.5:1})){ errs.push(t('song_dur', tk)); continue; }
+    const m=/^(?:(r)|([a-hA-H])(is|es|s|#|b)?([1-6]))([whqes])?(\.)?(?::(.*))?$/.exec(tk); if(!m){ errs.push(t('song_bad', tk)); continue; }
+    let d=DUR[m[5]||'q']; const dot=!!m[6]; if(dot) d*=1.5; if(!(d in {4:1,3:1,2:1,1.5:1,1:1,0.75:1,0.5:1,0.25:1})){ errs.push(t('song_dur', tk)); continue; }
     if(barPos>=bpb-1e-9){ bar++; barPos=0; }
     if(barPos+d > bpb+1e-9) errs.push(t('song_cross', tk));
-    const ev={d, dot, rest:!!m[1], startBeat:bar*bpb+barPos, bar, lyric:m[7]||'', flag:d===0.5};
+    const ev={d, dot, rest:!!m[1], startBeat:bar*bpb+barPos, bar, lyric:m[7]||'', flags: d<0.5 ? 2 : (d<1 ? 1 : 0)};
     if(!ev.rest){
       const L=m[2], suf=m[3]||''; let li, acc=0, oct;
       if(L===L.toLowerCase()){ if(L==='h') li=6; else if(L==='b'){ li=6; acc=-1; } else li='cdefga'.indexOf(L); acc += (suf==='is'||suf==='#') ? 1 : (suf==='es'||suf==='s'||suf==='b') ? -1 : 0; oct=+m[4]+3; }
@@ -945,8 +950,16 @@ function parseSong(text){
     evs.push(ev); barPos+=d;
   }
   // beam pairs of eighths that start on the same beat
-  for(let k=0;k<evs.length-1;k++){ const a=evs[k], b=evs[k+1]; if(a.d===0.5 && b.d===0.5 && !a.rest && !b.rest && a.startBeat%1===0 && b.startBeat===a.startBeat+0.5){ a.beam=1; b.beam=2; a.flag=b.flag=false; k++; } }
-  return {bpb, key, events:evs, bars: evs.length ? evs[evs.length-1].bar+1 : 0, errors:errs};
+  for(let k=0;k<evs.length-1;k++){ const a=evs[k], b=evs[k+1]; if(a.d===0.5 && b.d===0.5 && !a.rest && !b.rest && a.startBeat%1===0 && b.startBeat===a.startBeat+0.5){ a.beam=1; b.beam=2; a.flags=b.flags=0; k++; } }
+  // A pickup (predtakt) is a short first bar. Right-align it: the pickup keeps its place at beat 0 and everything
+  // after it slides back, so the first full bar follows immediately instead of after a bar of silence.
+  const bars = evs.length ? evs[evs.length-1].bar+1 : 0;
+  let pickup=0, pad=0;
+  if(evs.length){
+    const first=evs.reduce((a,e)=>a+(e.bar===0?e.d:0), 0);
+    if(first>1e-9 && first<bpb-1e-9){ pickup=first; pad=bpb-first; for(const e of evs) if(e.bar>0) e.startBeat-=pad; }
+  }
+  return {bpb, key, events:evs, bars, pickup, lenB: Math.max(0, bars*bpb-pad), errors:errs};
 }
 function songById(id){ return SONGS.find(x=>x.id===id); }
 function songTitle(id){ return id==='custom' ? t('custom_song') : (songById(id)||{}).title || id; }
@@ -956,7 +969,7 @@ function renderSongSel(){ const sel=$('#songSel'); sel.innerHTML=''; SONGS.forEa
 function loadSong(fromText){
   stopRun(); const txt = fromText!=null ? fromText : songText(); if(fromText==null) $('#songText').value=txt;
   const p=parseSong(txt); $('#songErr').textContent=p.errors.join(' · '); const x=songById(S.song); $('#songMeta').textContent = x ? (x.by||'') : '';
-  currentPhrase={events:p.events, bpb:p.bpb, key:p.key, bars:Math.max(p.bars,1)}; if(metroFree.on) metroFree.beat=0; refreshBeats(); lastResult=null; relayout(); hideResults(); setPhase('phase_idle'); targetEl.textContent='–'; renderFingering(null);
+  currentPhrase={events:p.events, bpb:p.bpb, key:p.key, bars:Math.max(p.bars,1), pickup:p.pickup, lenB:p.lenB}; if(metroFree.on) metroFree.beat=0; refreshBeats(); lastResult=null; relayout(); hideResults(); setPhase('phase_idle'); targetEl.textContent='–'; renderFingering(null);
 }
 
 // ===== state =====
@@ -1012,9 +1025,13 @@ function startRun(o){
 // mid-run: the map gets a new segment at the current beat and everything after it is re-timed and re-scheduled.
 // phrase/layout default to the displayed ones; By-ear auto-continue builds the next run for a phrase that is not shown yet
 function buildRun(o, t0, phrase=currentPhrase, layout=L){
-  const bpb=phrase.bpb, lenB=phrase.bars*bpb, cin=o.countIn?bpb:0, lreps=o.listen ? (o.listenReps||1) : 0;
+  const bpb=phrase.bpb, lenB=phrase.lenB!=null ? phrase.lenB : phrase.bars*bpb, cin=o.countIn?bpb:0, lreps=o.listen ? (o.listenReps||1) : 0;
   const after = !!(o.countAfterListen && o.listen);   // count-in placed after the listening phase (By ear) instead of before it
-  const R={bpb, lenB, cin, lreps, lb0: o.listen ? (after ? 0 : cin) : null, cb0: after ? lreps*lenB : 0, pb0: o.play ? cin+lreps*lenB : null, tailB:o.tail||0, frames:[], heard:[], liveItems:[], layout, phrase, mode, liveIdx:0, keep:!!o.keep, opts:o, next:null, bpm:S.bpm,
+  // pu = the pickup's length. A phase starts pu beats early so the pickup lands just before the first downbeat,
+  // which keeps every click on the same grid as the count-in.
+  const pu = phrase.pickup || 0;
+  const R={bpb, lenB, cin, lreps, pu, lb0: o.listen ? (after ? 0 : Math.max(0, cin-pu)) : null, cb0: after ? Math.max(0, lreps*lenB-pu) : 0,
+    pb0: o.play ? Math.max(0, cin+lreps*lenB-pu) : null, tailB:o.tail||0, frames:[], heard:[], liveItems:[], layout, phrase, mode, liveIdx:0, keep:!!o.keep, opts:o, next:null, bpm:S.bpm,
     segs:[{b:0, t:t0, spb:60/S.bpm}],
     tob(b){ let sg=this.segs[0]; for(const g of this.segs){ if(g.b<=b) sg=g; else break; } return sg.t+(b-sg.b)*sg.spb; },
     beatAt(t){ let sg=this.segs[0]; for(const g of this.segs){ if(g.t<=t) sg=g; else break; } return sg.b+(t-sg.t)/sg.spb; },
@@ -1022,7 +1039,7 @@ function buildRun(o, t0, phrase=currentPhrase, layout=L){
     get count0(){ return this.cin ? this.tob(this.cb0) : null; }, get listen0(){ return this.lb0==null ? null : this.tob(this.lb0); },
     get play0(){ return this.pb0==null ? null : this.tob(this.pb0); }, get playEnd(){ return this.pb0==null ? null : this.tob(this.pb0+this.lenB); },
     get end(){ return this.tob(this.eb); } };
-  R.eb = cin + lreps*lenB + (o.play ? lenB : 0) + R.tailB;
+  R.eb = Math.max(cin, R.lb0!=null ? R.lb0+lreps*lenB : 0, R.pb0!=null ? R.pb0+lenB : 0) + R.tailB;
   scheduleAudio(R, -1); return R;
 }
 // schedule clicks and tones for beats >= fromB (all of them for a fresh run; the remainder after a tempo change)
@@ -1030,11 +1047,12 @@ function scheduleAudio(R, fromB){
   const ev=R.layout.events, tob=b=>R.tob(b);
   const clicks=(b0,n)=>{ for(let i=0;i<n;i++){ const b=b0+i; if(b>=fromB) click(tob(b), i%R.bpb===0); } };
   const tones=(b0,vol)=>{ for(const e of ev){ if(e.rest) continue; const gb=b0+e.startBeat; if(gb<fromB) continue; playTone(e.note.midi+S.transpose, tob(gb), (tob(gb+e.d)-tob(gb))*0.9, vol); } };
+  const pu=R.pu||0, beats=n=>Math.max(0, Math.ceil(n-pu));   // clicks sit on the downbeat grid, pu beats after a phase starts
   if(R.cin) clicks(R.cb0, R.cin);
-  if(R.lb0!=null){ if(S.metro) clicks(R.lb0, R.lreps*R.lenB); for(let k=0;k<R.lreps;k++) tones(R.lb0+k*R.lenB, 0.28); }
+  if(R.lb0!=null){ if(S.metro) clicks(R.lb0+pu, beats(R.lreps*R.lenB)); for(let k=0;k<R.lreps;k++) tones(R.lb0+k*R.lenB, 0.28); }
   if(R.pb0!=null){
     if(R.opts.selftest) tones(R.pb0, 0.35);   // self-test: the app plays the phrase itself, no clicks (they would mask the onsets)
-    else { if(S.metro) clicks(R.pb0, R.lenB); if(S.playAlong && (mode==='sight'||mode==='songs')) tones(R.pb0, 0.07); }
+    else { if(S.metro) clicks(R.pb0+pu, beats(R.lenB)); if(S.playAlong && (mode==='sight'||mode==='songs')) tones(R.pb0, 0.07); }
   }
 }
 // tempo slider moved (or the ladder changed S.bpm): re-time the current run from now on, and rebuild the pre-scheduled next pass
@@ -1050,6 +1068,8 @@ function adoptRun(R){ onset.reset(); run=R; if(!R.keep) svg.classList.toggle('hi
 function swapPhrase(R){ currentPhrase=R.phrase; lastResult=null; hideResults(); setMsg(''); relayout(); R.layout=L; }
 // options for the pass that follows R when looping: Listen repeats after one beat of silence; a played pass gets a count-in and keeps its colours
 function loopOpts(R){ return R.play0==null ? {countIn:false, listen:true, play:false, tail:1} : Object.assign(runOpts(), {countIn:true, keep:true}); }
+// which beat of the bar to light: with a pickup the first downbeat falls pu beats into the phrase
+function beatDot(beat, R){ const k=Math.floor(beat-(R.pu||0)); return ((k % R.bpb)+R.bpb) % R.bpb; }
 function runTick(frame){
   if(!run) return; const R=run, now=A.ctx.currentTime; const b=R.beatAt(now);
   // schedule the next pass half a second early so it starts exactly where this one ends (no gap in the pulse):
@@ -1067,10 +1087,10 @@ function runTick(frame){
     else if(R.keep && !(inCount && R.cb0===0)){ R.keep=false; lastResult=null; clearColors(); hideResults(); svg.classList.toggle('hide-notes', notesHidden()); }
   }
   if(inCount){ setPhase('phase_count'); setBeats(Math.floor(b-R.cb0), R.bpb); return; }
-  if(inListen){ setPhase('phase_listen'); const beat=(b-R.lb0)%R.lenB; setBeats(Math.floor(beat)%R.bpb, R.bpb); if(R.phrase===currentPhrase) setPlayhead(beat,'listen'); else setPlayhead(null); return; }
+  if(inListen){ setPhase('phase_listen'); const beat=(b-R.lb0)%R.lenB; setBeats(beatDot(beat,R), R.bpb); if(R.phrase===currentPhrase) setPlayhead(beat,'listen'); else setPlayhead(null); return; }
   if(R.pb0!=null && now<R.playEnd+0.35){
     setPhase('phase_play'); const beat=b-R.pb0;
-    if(beat<R.lenB){ setBeats(Math.floor(beat)%R.bpb, R.bpb); setPlayhead(beat,'play'); }
+    if(beat<R.lenB){ setBeats(beatDot(beat,R), R.bpb); setPlayhead(beat,'play'); }
     if(now>=R.play0-0.3){ R.frames.push(frame); if(frame.midi!=null) R.heard.push({b:R.beatAt(frame.t)-R.pb0, w:frame.midi-S.transpose}); }
     liveScore(R, frame.t);
     if(frame.midi!=null && curIdx>=0) setGhost(frame.midi-S.transpose, curX+1.4*L.sp, curTop); else setGhost(null);
